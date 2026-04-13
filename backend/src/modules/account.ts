@@ -21,6 +21,8 @@ const createAccountSchema = z.object({
   balance: z.number().default(0),
   currency: z.string().default('CNY'),
   remark: z.string().optional(),
+  // 卡号（银行卡/信用卡）
+  cardNumber: z.string().optional(),
   // 信用账户扩展字段
   creditLimit: z.number().optional(),
   availableCredit: z.number().optional(),
@@ -39,6 +41,8 @@ const updateAccountSchema = z.object({
   currency: z.string().optional(),
   remark: z.string().optional(),
   isArchived: z.boolean().optional(),
+  // 卡号
+  cardNumber: z.string().optional().nullable(),
   // 信用账户扩展字段
   creditLimit: z.number().optional(),
   availableCredit: z.number().optional(),
@@ -226,6 +230,7 @@ accountRouter.post('/create', validate(createAccountSchema), async (req: Request
       balance: data.balance,
       currency: data.currency,
       remark: data.remark,
+      cardNumber: data.cardNumber,
       // 信用账户扩展字段
       creditLimit: data.creditLimit,
       availableCredit: data.availableCredit,

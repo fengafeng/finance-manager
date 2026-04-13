@@ -30,8 +30,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import type { Fund, FundType, InvestmentPlatform } from '@/types';
+import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 const fundTypeLabels: Record<FundType, string> = {
   STOCK: '股票型',
@@ -289,27 +291,37 @@ export default function Funds() {
               管理基金、理财产品、股票等各类投资
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingFund(null)}>
-                <Plus className="h-4 w-4 mr-2" />
-                新增产品
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingFund ? '编辑产品' : '新增投资产品'}</DialogTitle>
-              </DialogHeader>
-              <FundForm
-                fund={editingFund}
-                onSubmit={handleSubmit}
-                onCancel={() => {
-                  setDialogOpen(false);
-                  setEditingFund(null);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2">
+            <NaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditingFund(null)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  新增产品
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingFund ? '编辑产品' : '新增投资产品'}</DialogTitle>
+                </DialogHeader>
+                <FundForm
+                  fund={editingFund}
+                  onSubmit={handleSubmit}
+                  onCancel={() => {
+                    setDialogOpen(false);
+                    setEditingFund(null);
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         </FadeIn>
 
         {/* 汇总卡片 */}

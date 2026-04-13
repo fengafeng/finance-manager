@@ -15,6 +15,8 @@ export interface Account {
   includeNetWorth: boolean;
   createdAt: string;
   updatedAt: string;
+  // 卡号（银行卡/信用卡）
+  cardNumber?: string | null;
   // 信用账户扩展字段
   creditLimit?: number | null;
   availableCredit?: number | null;

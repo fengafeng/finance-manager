@@ -194,6 +194,341 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+// ==================== 自然语言创建 ====================
+
+// 自然语言解析系统提示词
+const NATURAL_ADD_SYSTEM_PROMPT = `你是一个财务数据解析助手。用户会输入自然语言描述要创建的数据，你需要将其解析为结构化的JSON对象。
+
+**你的任务是**：分析用户的自然语言输入，识别其意图，并提取关键信息。
+
+## 支持创建的数据类型（module字段）
+
+1. **account** - 账户
+   解析字段：
+   - name: string (必填) - 账户名称
+   - type: string - 账户类型，可选值：ALIPAY/WECHAT/BANK/CREDIT_CARD/CASH/HUABEI/BAITIAO/DOUYIN_PAY/OTHER
+   - balance: number - 当前余额/已用额度
+   - cardNumber: string - 卡号（可选，存储尾号）
+   - creditLimit: number - 信用额度（信用卡/花呗/白条可选）
+   - billingDate: number - 出账日1-31（可选）
+   - paymentDueDate: number - 还款日1-31（可选）
+
+2. **transaction** - 交易记录
+   解析字段：
+   - type: string - 交易类型：INCOME/EXPENSE/TRANSFER/REFUND
+   - amount: number (必填) - 金额
+   - category: string - 分类名称（自动识别支出/收入分类）
+   - description: string - 描述/备注
+   - transactionDate: string - 交易日期（ISO格式如2024-01-15），用户说"今天"则用今天，"昨天"则用昨天
+   - merchant: string - 商家/来源
+   - accountId: string - 账户ID（用户会提到账户名，需要匹配现有账户）
+
+3. **fund** - 投资产品（基金/理财/股票等）
+   解析字段：
+   - name: string (必填) - 产品名称
+   - code: string - 产品代码（可选）
+   - type: string - 产品类型：STOCK/BOND/MIXED/MONEY/QDII/WEALTH_MANAGEMENT/STOCK_PRODUCT/OTHER
+   - platform: string - 平台：ALIPAY/WECHAT/TENCENT/JD_FINANCE/BAIDU_WALLET/BANK_APP/FUND_COMPANY/STOCK_BROKER/OTHER
+   - shares: number - 持有份额
+   - costPerShare: number - 成本价（可选）
+   - currentValue: number - 当前市值（可选）
+   - purchaseDate: string - 买入日期（ISO格式，可选）
+
+4. **loan** - 贷款
+   解析字段：
+   - name: string (必填) - 贷款名称
+   - loanType: string - 贷款类型：MORTGAGE/CAR_LOAN/CREDIT_CARD/HUABEI/BAITIAO/DOUYIN_PAY/OTHER
+   - principal: number - 初始本金/总额
+   - remainingPrincipal: number - 剩余本金/已用额度
+   - annualRate: number - 年化利率（百分比，如5.2表示5.2%）
+   - startDate: string - 开始日期（ISO格式）
+   - monthlyPayment: number - 月供金额（可选）
+
+## 识别规则
+
+1. 提到"添加账户"、"新建账户"、"开个账户" → module: account
+2. 提到"花呗"、"白条"、"信用卡"、"抖音月付" → account 且 type 分别为 HUABEI/BAITIAO/CREDIT_CARD/DOUYIN_PAY
+3. 提到"银行卡"、"储蓄卡" → account 且 type: BANK
+4. 提到"买了"、"定投"、"持有"、"基金"、"理财" → module: fund
+5. 提到"交易"、"消费"、"收入"、"支出"、"转账" → module: transaction
+6. 提到"房贷"、"车贷"、"贷款"、"借了" → module: loan
+
+## 金额识别
+- 中文数字如"一万"→ 10000，"五千"→ 5000
+- "尾号1234" → cardNumber: "1234"
+- 日期：今天/昨天/前天 → 对应日期
+
+## 输出格式
+
+请严格返回以下JSON格式，不要输出任何其他内容：
+\`\`\`json
+{
+  "module": "account|transaction|fund|loan",
+  "confidence": 0.0-1.0,
+  "parsed": {
+    ...根据module类型填充对应字段...
+  },
+  "rawText": "用户原始输入",
+  "ambiguous": false,
+  "needAccountId": false
+}
+\`\`\`
+
+confidence表示解析置信度，低于0.6时请设置ambiguous: true。
+needAccountId: true 表示交易需要用户确认账户ID。
+
+现在开始解析用户的输入。`;
+
+// 自然语言创建接口
+router.post('/natural-add', async (req, res) => {
+  if (!isAIEnabled()) {
+    res.status(503).json({
+      success: false,
+      error: 'AI 功能未启用，请检查 .env 中的 AI_PROVIDER 配置',
+    });
+    return;
+  }
+
+  const { text }: { text: string } = req.body;
+
+  if (!text || typeof text !== 'string') {
+    res.status(400).json({ success: false, error: '文本内容不能为空' });
+    return;
+  }
+
+  try {
+    const adapter = getAIAdapter();
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: NATURAL_ADD_SYSTEM_PROMPT },
+      { role: 'user', content: text },
+    ];
+
+    const response = await adapter.chat(messages, {
+      temperature: 0.1, // 低温度确保稳定性
+      topP: 0.8,
+    });
+
+    // 解析 AI 返回的 JSON
+    let parsedData: any;
+    try {
+      // 尝试从返回内容中提取 JSON
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('无法解析返回内容');
+      }
+    } catch (parseError) {
+      res.status(500).json({
+        success: false,
+        error: 'AI 返回格式解析失败，请重试',
+        raw: response.content,
+      });
+      return;
+    }
+
+    // 如果是 transaction 类型，需要获取账户列表让前端匹配
+    let accounts: any[] = [];
+    if (parsedData.module === 'transaction') {
+      accounts = await prisma.account.findMany({
+        select: { id: true, name: true, type: true },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...parsedData,
+        accounts,
+        message: buildConfirmationMessage(parsedData),
+      },
+    });
+  } catch (error: unknown) {
+    console.error('Natural add error:', error);
+    const message = error instanceof Error ? error.message : '未知错误';
+    res.status(500).json({
+      success: false,
+      error: `解析失败：${message}`,
+    });
+  }
+});
+
+// 自然语言确认创建接口
+router.post('/natural-create', async (req, res) => {
+  if (!isAIEnabled()) {
+    res.status(503).json({
+      success: false,
+      error: 'AI 功能未启用',
+    });
+    return;
+  }
+
+  const { module, data }: { module: string; data: any } = req.body;
+
+  try {
+    let result: any;
+
+    switch (module) {
+      case 'account': {
+        result = await prisma.account.create({
+          data: {
+            name: data.name,
+            type: data.type || 'OTHER',
+            balance: data.balance || 0,
+            cardNumber: data.cardNumber,
+            creditLimit: data.creditLimit,
+            availableCredit: data.availableCredit,
+            billingDate: data.billingDate,
+            paymentDueDate: data.paymentDueDate,
+            unpostedBalance: data.unpostedBalance || 0,
+          },
+        });
+        // 同步到贷款
+        await syncAccountToLoan(result.id, data);
+        break;
+      }
+      case 'transaction': {
+        result = await prisma.transaction.create({
+          data: {
+            accountId: data.accountId,
+            type: data.type || 'EXPENSE',
+            amount: data.amount,
+            category: data.category,
+            description: data.description,
+            transactionDate: data.transactionDate ? new Date(data.transactionDate) : new Date(),
+            merchant: data.merchant,
+            sourceType: 'MANUAL',
+          },
+        });
+        break;
+      }
+      case 'fund': {
+        result = await prisma.fund.create({
+          data: {
+            name: data.name,
+            code: data.code || '',
+            type: data.type || 'OTHER',
+            platform: data.platform || 'OTHER',
+            shares: data.shares || 0,
+            costPerShare: data.costPerShare || 0,
+            currentValue: data.currentValue || 0,
+            purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : null,
+          },
+        });
+        break;
+      }
+      case 'loan': {
+        result = await prisma.loan.create({
+          data: {
+            name: data.name,
+            loanType: data.loanType || 'OTHER',
+            principal: data.principal || 0,
+            remainingPrincipal: data.remainingPrincipal || data.principal || 0,
+            annualRate: data.annualRate ? data.annualRate / 100 : 0,
+            startDate: data.startDate ? new Date(data.startDate) : new Date(),
+            monthlyPayment: data.monthlyPayment,
+          },
+        });
+        break;
+      }
+      default:
+        res.status(400).json({ success: false, error: `不支持的模块: ${module}` });
+        return;
+    }
+
+    res.json({
+      success: true,
+      data: result,
+      message: `✅ ${getModuleName(module)}创建成功！`,
+    });
+  } catch (error: unknown) {
+    console.error('Natural create error:', error);
+    const message = error instanceof Error ? error.message : '未知错误';
+    res.status(500).json({ success: false, error: `创建失败：${message}` });
+  }
+});
+
+// 辅助函数：根据账户类型同步到贷款
+async function syncAccountToLoan(accountId: string, data: any) {
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!account) return;
+
+  const creditTypes = ['CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY'];
+  if (!creditTypes.includes(account.type)) return;
+
+  const usedCredit = Math.abs(data.balance ?? account.balance);
+  const creditLimit = data.creditLimit ?? account.creditLimit;
+  const availableCredit = creditLimit ? Number(creditLimit) - usedCredit : null;
+
+  const loanData: any = {
+    name: data.name ?? account.name,
+    loanType: account.type as any,
+    principal: creditLimit ?? usedCredit,
+    remainingPrincipal: usedCredit,
+    annualRate: 0,
+    startDate: account.createdAt,
+    endDate: new Date('2099-12-31'),
+    billingDate: data.billingDate ?? account.billingDate,
+    paymentDueDate: data.paymentDueDate ?? account.paymentDueDate,
+    creditLimit: creditLimit,
+    availableCredit: availableCredit,
+    linkedCreditAccountId: accountId,
+  };
+
+  const existing = await prisma.loan.findFirst({ where: { linkedCreditAccountId: accountId } });
+  if (existing) {
+    await prisma.loan.update({ where: { id: existing.id }, data: loanData });
+  } else {
+    await prisma.loan.create({ data: loanData });
+  }
+}
+
+// 辅助函数：生成确认消息
+function buildConfirmationMessage(parsed: any): string {
+  const lines: string[] = [];
+
+  switch (parsed.module) {
+    case 'account':
+      lines.push(`📋 账户：${parsed.parsed?.name || '未知'}`);
+      if (parsed.parsed?.type) lines.push(`类型：${parsed.parsed.type}`);
+      if (parsed.parsed?.balance) lines.push(`余额：¥${parsed.parsed.balance}`);
+      if (parsed.parsed?.creditLimit) lines.push(`额度：¥${parsed.parsed.creditLimit}`);
+      if (parsed.parsed?.cardNumber) lines.push(`卡号：尾号${parsed.parsed.cardNumber}`);
+      break;
+    case 'transaction':
+      lines.push(`💰 交易：¥${parsed.parsed?.amount || 0}`);
+      lines.push(`类型：${parsed.parsed?.type === 'INCOME' ? '收入' : parsed.parsed?.type === 'EXPENSE' ? '支出' : parsed.parsed?.type}`);
+      if (parsed.parsed?.description) lines.push(`描述：${parsed.parsed.description}`);
+      if (parsed.parsed?.transactionDate) lines.push(`日期：${parsed.parsed.transactionDate}`);
+      break;
+    case 'fund':
+      lines.push(`📊 投资：${parsed.parsed?.name || '未知'}`);
+      if (parsed.parsed?.type) lines.push(`类型：${parsed.parsed.type}`);
+      if (parsed.parsed?.shares) lines.push(`份额：${parsed.parsed.shares}`);
+      if (parsed.parsed?.currentValue) lines.push(`市值：¥${parsed.parsed.currentValue}`);
+      break;
+    case 'loan':
+      lines.push(`🏦 贷款：${parsed.parsed?.name || '未知'}`);
+      if (parsed.parsed?.loanType) lines.push(`类型：${parsed.parsed.loanType}`);
+      if (parsed.parsed?.principal) lines.push(`本金：¥${parsed.parsed.principal}`);
+      if (parsed.parsed?.annualRate) lines.push(`利率：${parsed.parsed.annualRate}%`);
+      break;
+  }
+
+  return lines.join('\n');
+}
+
+function getModuleName(module: string): string {
+  const map: Record<string, string> = {
+    account: '账户',
+    transaction: '交易',
+    fund: '投资',
+    loan: '贷款',
+  };
+  return map[module] || module;
+}
+
 // 快捷查询接口
 router.post('/quick-query', async (req, res) => {
   if (!isAIEnabled()) {

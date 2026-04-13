@@ -117,6 +117,9 @@ model Account {
   // 关联的贷款记录ID（信用卡/花呗等同步到贷款管理后关联）
   linkedLoanId       String?  @unique
 
+  // 卡号（银行卡/信用卡，支持存储完整号或尾号）
+  cardNumber         String?  // 脱敏存储，只存尾号或完整号（用户自己决定）
+
   // 关联
   transactions Transaction[]
   // 反向关联：此账户作为还款账户时的贷款列表

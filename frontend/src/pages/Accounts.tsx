@@ -32,11 +32,16 @@ import {
   Smartphone,
   BanknoteIcon,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import type { Account, AccountType } from '@/types';
+import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 // 信用账户类型
 const CREDIT_ACCOUNT_TYPES: AccountType[] = ['CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY'];
+
+// 需要卡号的账户类型
+const CARD_ACCOUNT_TYPES: AccountType[] = ['BANK', 'CREDIT_CARD'];
 
 const accountTypeLabels: Record<AccountType, string> = {
   ALIPAY: '支付宝',
@@ -71,6 +76,11 @@ function isCreditAccount(type: AccountType): boolean {
   return CREDIT_ACCOUNT_TYPES.includes(type);
 }
 
+// 判断是否需要卡号
+function needsCardNumber(type: AccountType): boolean {
+  return CARD_ACCOUNT_TYPES.includes(type);
+}
+
 // 账户表单组件
 function AccountForm({
   account,
@@ -91,6 +101,7 @@ function AccountForm({
   const [billingDate, setBillingDate] = useState(account?.billingDate?.toString() || '');
   const [paymentDueDate, setPaymentDueDate] = useState(account?.paymentDueDate?.toString() || '');
   const [unpostedBalance, setUnpostedBalance] = useState(account?.unpostedBalance?.toString() || '0');
+  const [cardNumber, setCardNumber] = useState(account?.cardNumber || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +110,7 @@ function AccountForm({
       type,
       balance: parseFloat(balance) || 0,
       remark,
+      cardNumber: needsCardNumber(type) ? cardNumber : undefined,
       creditLimit: creditLimit ? parseFloat(creditLimit) : undefined,
       availableCredit: availableCredit ? parseFloat(availableCredit) : undefined,
       billingDate: billingDate ? parseInt(billingDate) : undefined,
@@ -138,6 +150,19 @@ function AccountForm({
           </Select>
         </div>
       </div>
+
+      {/* 卡号字段（银行卡/信用卡专属） */}
+      {needsCardNumber(type) && (
+        <div className="space-y-2">
+          <Label htmlFor="cardNumber">卡号</Label>
+          <Input
+            id="cardNumber"
+            value={cardNumber}
+            onChange={(e) => setCardNumber(e.target.value)}
+            placeholder="输入银行卡号或尾号（如 6235）"
+          />
+        </div>
+      )}
 
       {/* 信用账户扩展字段 */}
       {showCreditFields && (
@@ -306,7 +331,16 @@ export default function Accounts() {
               管理您的各类账户资产和信用账户
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <div className="flex gap-2">
+            <NaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingAccount(null)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -327,6 +361,7 @@ export default function Accounts() {
               />
             </DialogContent>
           </Dialog>
+          </div>
         </FadeIn>
 
         {/* 账户列表 */}
@@ -432,6 +467,11 @@ export default function Accounts() {
                             <span className="font-semibold">{formatMoney(account.unpostedBalance)}</span>
                           </div>
                         )}
+                        {account.cardNumber && (
+                          <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                            卡号尾号：{account.cardNumber}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div className="mt-4">
@@ -441,6 +481,11 @@ export default function Accounts() {
                         <p className="font-bold" style={{ fontSize: 'var(--font-size-headline)' }}>
                           {formatMoney(account.balance)}
                         </p>
+                        {account.cardNumber && (
+                          <p className="text-muted-foreground mt-1" style={{ fontSize: 'var(--font-size-small)' }}>
+                            卡号尾号：{account.cardNumber}
+                          </p>
+                        )}
                       </div>
                     )}
 

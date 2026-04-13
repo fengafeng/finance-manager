@@ -32,8 +32,10 @@ import {
   Trash2,
   Calendar,
   Calculator,
+  Sparkles,
 } from 'lucide-react';
 import type { LoanType } from '@/types';
+import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 const loanTypeLabels: Record<LoanType, { label: string; icon: React.ElementType; category: 'traditional' | 'credit' }> = {
   MORTGAGE: { label: '房贷', icon: Home, category: 'traditional' },
@@ -412,15 +414,24 @@ export default function Loans() {
               管理信用卡、花呗、白条、房贷、车贷等各类负债
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingLoan(null)}>
-                <Plus className="h-4 w-4 mr-2" />
-                新增贷款
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
+          <div className="flex gap-2">
+            <NaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditingLoan(null)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  新增贷款
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
                 <DialogTitle>{editingLoan ? '编辑贷款' : '新增贷款'}</DialogTitle>
               </DialogHeader>
               <LoanForm
@@ -433,6 +444,7 @@ export default function Loans() {
               />
             </DialogContent>
           </Dialog>
+          </div>
         </FadeIn>
 
         {/* 信用账户（信用卡/花呗/白条/抖音月付） */}

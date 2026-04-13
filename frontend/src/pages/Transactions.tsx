@@ -34,8 +34,10 @@ import {
   RefreshCcw,
   Search,
   Filter,
+  Sparkles,
 } from 'lucide-react';
 import type { Transaction, TransactionType } from '@/types';
+import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 const transactionTypeLabels: Record<TransactionType, { label: string; color: string }> = {
   INCOME: { label: '收入', color: 'text-success' },
@@ -235,6 +237,14 @@ export default function Transactions() {
               <RefreshCcw className="h-4 w-4 mr-2" />
               初始化分类
             </Button>
+            <NaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
