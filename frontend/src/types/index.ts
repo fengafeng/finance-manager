@@ -199,6 +199,7 @@ export interface HealthReport {
     investmentVolatility: DimensionScore;
   };
   suggestions: string[];
+  analysisData: HealthAnalysisData | null;
   createdAt: string;
 }
 

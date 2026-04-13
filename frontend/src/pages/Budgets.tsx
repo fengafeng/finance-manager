@@ -133,18 +133,17 @@ export default function Budgets() {
   }
 
   // 计算当月数据
-  const now = new Date();
   const currentYM = getCurrentYearMonth();
   const currentBudget = budgets?.find(b => b.yearMonth === currentYM);
   const currentExpectedIncome = currentBudget?.expectedIncome || 0;
   const currentExpectedExpense = currentBudget?.expectedExpense || 0;
-  const currentActualIncome = currentBudget?.actualIncome;
-  const currentActualExpense = currentBudget?.actualExpense;
+  const currentActualIncome = currentBudget?.actualIncome ?? 0;
+  const currentActualExpense = currentBudget?.actualExpense ?? 0;
 
   // 收入达成率
-  const incomeRate = currentActualIncome !== null && currentExpectedIncome > 0
+  const incomeRate = currentExpectedIncome > 0
     ? (currentActualIncome / currentExpectedIncome) * 100 : null;
-  const expenseRate = currentActualExpense !== null && currentExpectedExpense > 0
+  const expenseRate = currentExpectedExpense > 0
     ? (currentActualExpense / currentExpectedExpense) * 100 : null;
 
   return (
@@ -208,9 +207,7 @@ export default function Budgets() {
                   <PiggyBank className="h-4 w-4 text-primary" />
                 </div>
                 <p className="font-bold text-lg">{formatMoney(currentExpectedIncome - currentExpectedExpense)}</p>
-                {currentActualIncome !== null && currentActualExpense !== null && (
-                  <p className="text-sm text-muted-foreground mt-1">实际结余：{formatMoney(currentActualIncome - currentActualExpense)}</p>
-                )}
+                <p className="text-sm text-muted-foreground mt-1">实际结余：{formatMoney(currentActualIncome - currentActualExpense)}</p>
               </CardContent>
             </Card>
             <Card>

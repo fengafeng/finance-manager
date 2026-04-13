@@ -11,14 +11,11 @@ import {
   ImportSourceType,
 } from '@/hooks/use-import';
 import { useAccounts } from '@/hooks/use-accounts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -60,6 +57,7 @@ const sourceTypeLabels: Record<ImportSourceType, { label: string; icon: string; 
   ALIPAY: { label: '支付宝', icon: '💰', desc: '导出「明细记录」CSV 文件' },
   WECHAT: { label: '微信支付', icon: '💬', desc: '导出「交易记录」CSV 文件' },
   BANK: { label: '银行账单', icon: '🏦', desc: '导出银行流水 CSV 文件' },
+  OTHER: { label: '其他', icon: '📄', desc: '导入其他格式的账单文件' },
 };
 
 const categoryOptions = [
@@ -291,12 +289,10 @@ function StepUpload({
 
 function StepPreview({
   sessionId,
-  initialInfo,
   onBack,
   onConfirmed,
 }: {
   sessionId: string;
-  initialInfo: any;
   onBack: () => void;
   onConfirmed: (result: any) => void;
 }) {
@@ -748,7 +744,6 @@ export default function Import() {
                 {step === 'preview' && sessionId && (
                   <StepPreview
                     sessionId={sessionId}
-                    initialInfo={uploadInfo}
                     onBack={handleBack}
                     onConfirmed={handleConfirmed}
                   />

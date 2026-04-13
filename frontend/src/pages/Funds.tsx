@@ -30,10 +30,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
-  Sparkles,
 } from 'lucide-react';
 import type { Fund, FundType, InvestmentPlatform } from '@/types';
-import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 const fundTypeLabels: Record<FundType, string> = {
   STOCK: '股票型基金',
@@ -293,14 +291,6 @@ export default function Funds() {
             </p>
           </div>
           <div className="flex gap-2">
-            <NaturalAddDialog
-              trigger={
-                <Button variant="outline">
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  智能添加
-                </Button>
-              }
-            />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingFund(null)}>

@@ -230,7 +230,7 @@ export default function Dashboard() {
                         {fund.name}
                       </p>
                       <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
-                        {fund.code} · {fund.shares}份
+                        {fund.code}
                       </p>
                     </div>
                     <div className="text-right">

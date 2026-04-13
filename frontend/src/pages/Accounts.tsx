@@ -3,7 +3,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { FadeIn, Stagger } from '@/components/MotionPrimitives';
 import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount } from '@/hooks/use-accounts';
 import { useNaturalAdd, useNaturalCreate, useAccountOptions } from '@/hooks/use-natural-add';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,8 +38,6 @@ import {
   Sparkles,
   Loader2,
   Check,
-  Trash,
-  ArrowUpDown,
   Calendar,
   X,
 } from 'lucide-react';
@@ -361,7 +359,7 @@ function NaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
     try {
       const result = await naturalAddMutation.mutateAsync(input);
 
-      if (result.module === '') {
+      if (!result.module) {
         toast.error('无法识别输入内容，请尝试更详细的描述');
         return;
       }
@@ -375,7 +373,7 @@ function NaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
         category: result.parsed?.category,
         description: result.parsed?.description,
         date: result.parsed?.transactionDate || result.parsed?.date,
-        accountId: result.parsed?.accountId || (result.accounts?.length > 0 ? result.accounts[0].id : ''),
+        accountId: result.parsed?.accountId || (result.accounts && result.accounts.length > 0 ? result.accounts[0].id : ''),
         direction: result.parsed?.direction,
         counterparty: result.parsed?.counterparty,
         confidence: result.confidence,

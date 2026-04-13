@@ -355,7 +355,7 @@ export default function Health() {
                             { key: 'cash', label: '现金/存款', icon: Wallet, color: 'bg-blue-500' },
                             { key: 'investment', label: '投资资产', icon: TrendingUp, color: 'bg-purple-500' },
                             { key: 'providentFund', label: '公积金', icon: Landmark, color: 'bg-green-500' },
-                          ].map(({ key, label, icon: Icon, color }) => {
+                          ].map(({ key, label, color }) => {
                             const asset = report.analysisData.assetAllocation?.[key];
                             if (!asset) return null;
                             return (
