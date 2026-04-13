@@ -38,7 +38,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { LoanType, LoanDirection, LoanStatus } from '@/types';
-import { NaturalAddDialog } from '@/components/NaturalAddDialog';
+
 
 const loanTypeLabels: Record<LoanType, { label: string; icon: React.ElementType; category: 'traditional' | 'credit' }> = {
   MORTGAGE: { label: '房贷', icon: Home, category: 'traditional' },
@@ -369,7 +369,6 @@ export default function Loans() {
             <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-body)', marginTop: 'var(--spacing-xs)' }}>信用账户 · 传统贷款 · 借款管理</p>
           </div>
           <div className="flex gap-2">
-            <NaturalAddDialog trigger={<Button variant="outline"><Sparkles className="h-4 w-4 mr-2" />智能添加</Button>} />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingLoan(null)}><Plus className="h-4 w-4 mr-2" />新增</Button>
