@@ -36,13 +36,18 @@ import type { Fund, FundType, InvestmentPlatform } from '@/types';
 import { NaturalAddDialog } from '@/components/NaturalAddDialog';
 
 const fundTypeLabels: Record<FundType, string> = {
-  STOCK: '股票型',
-  BOND: '债券型',
-  MIXED: '混合型',
-  MONEY: '货币型',
-  QDII: 'QDII',
+  STOCK: '股票型基金',
+  BOND: '债券型基金',
+  MIXED: '混合型基金',
+  MONEY: '货币型基金',
+  QDII: 'QDII基金',
+  INDEX: '指数型基金',
   WEALTH_MANAGEMENT: '理财产品',
   STOCK_PRODUCT: '股票',
+  PENSION: '养老险',
+  ANNUITY: '年金险',
+  UNIVERSAL: '万能险',
+  INSURANCE_CASH: '保险(现金价值)',
   OTHER: '其他',
 };
 
@@ -80,21 +85,28 @@ function FundForm({
   const [name, setName] = useState(fund?.name || '');
   const [type, setType] = useState<FundType>(fund?.type || 'MIXED');
   const [platform, setPlatform] = useState<InvestmentPlatform>(fund?.platform || 'OTHER');
-  const [shares, setShares] = useState(fund?.shares?.toString() || '0');
-  const [costPerShare, setCostPerShare] = useState(fund?.costPerShare?.toString() || '0');
+  const [cost, setCost] = useState(fund?.cost?.toString() || '0');
   const [currentValue, setCurrentValue] = useState(fund?.currentValue?.toString() || '0');
   const [remark, setRemark] = useState(fund?.remark || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const costVal = parseFloat(cost) || 0;
+    const currentVal = parseFloat(currentValue) || 0;
+    // 收益 = 当前市值 - 成本
+    const profit = currentVal - costVal;
+    // 收益率 = 收益 / 成本 * 100
+    const profitRate = costVal > 0 ? (profit / costVal) * 100 : 0;
+
     onSubmit({
       code,
       name,
       type,
       platform,
-      shares: parseFloat(shares) || 0,
-      costPerShare: parseFloat(costPerShare) || 0,
-      currentValue: parseFloat(currentValue) || 0,
+      cost: costVal,
+      currentValue: currentVal,
+      profit: profit,
+      profitRate: profitRate,
       remark,
     });
   };
@@ -153,27 +165,16 @@ function FundForm({
           required
         />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="shares">持有份额/数量</Label>
+          <Label htmlFor="cost">投资成本</Label>
           <Input
-            id="shares"
+            id="cost"
             type="number"
             step="0.01"
-            value={shares}
-            onChange={(e) => setShares(e.target.value)}
-            placeholder="0"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="costPerShare">成本价</Label>
-          <Input
-            id="costPerShare"
-            type="number"
-            step="0.0001"
-            value={costPerShare}
-            onChange={(e) => setCostPerShare(e.target.value)}
-            placeholder="0.0000"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            placeholder="买入时的总成本"
           />
         </div>
         <div className="space-y-2">
@@ -184,7 +185,7 @@ function FundForm({
             step="0.01"
             value={currentValue}
             onChange={(e) => setCurrentValue(e.target.value)}
-            placeholder="0.00"
+            placeholder="当前总价值"
           />
         </div>
       </div>
@@ -230,10 +231,10 @@ export default function Funds() {
   const platformSummary = summary?.byPlatform || {};
 
   const handleSubmit = (data: Partial<Fund>) => {
-    const cost = (data.shares || 0) * (data.costPerShare || 0);
-    const currentValue = data.currentValue || 0;
-    const profit = currentValue - cost;
-    const profitRate = cost > 0 ? (profit / cost) * 100 : 0;
+    // 收益 = 当前市值 - 成本
+    const profit = (data.currentValue || 0) - (data.cost || 0);
+    // 收益率 = 收益 / 成本 * 100
+    const profitRate = (data.cost || 0) > 0 ? (profit / (data.cost || 0)) * 100 : 0;
 
     const fundData = {
       ...data,
@@ -447,7 +448,7 @@ export default function Funds() {
                         </p>
                       </div>
                       <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
-                        {fund.code} · {fund.shares}{fund.type === 'STOCK_PRODUCT' ? '股' : '份'}
+                        {fund.code}
                       </p>
                     </div>
                     <div className="flex gap-1">
@@ -476,7 +477,7 @@ export default function Funds() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
-                        市值
+                        当前市值
                       </p>
                       <p className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
                         {formatMoney(fund.currentValue)}
@@ -487,12 +488,12 @@ export default function Funds() {
                         成本
                       </p>
                       <p className="font-semibold" style={{ fontSize: 'var(--font-size-small)' }}>
-                        ¥{fund.costPerShare.toFixed(4)}
+                        {formatMoney(fund.cost)}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
-                        收益
+                        收益率
                       </p>
                       <div className="flex items-center gap-1">
                         {fund.profit >= 0 ? (

@@ -78,7 +78,7 @@ export interface TransactionStatistics {
 }
 
 // 基金类型（扩展为投资产品类型）
-export type FundType = 'STOCK' | 'BOND' | 'MIXED' | 'MONEY' | 'QDII' | 'WEALTH_MANAGEMENT' | 'STOCK_PRODUCT' | 'OTHER';
+export type FundType = 'STOCK' | 'BOND' | 'MIXED' | 'MONEY' | 'QDII' | 'INDEX' | 'WEALTH_MANAGEMENT' | 'STOCK_PRODUCT' | 'PENSION' | 'ANNUITY' | 'UNIVERSAL' | 'INSURANCE_CASH' | 'OTHER';
 
 // 投资平台
 export type InvestmentPlatform = 'ALIPAY' | 'WECHAT' | 'TENCENT' | 'JD_FINANCE' | 'BAIDU_WALLET' | 'BANK_APP' | 'FUND_COMPANY' | 'STOCK_BROKER' | 'OTHER';
@@ -89,8 +89,7 @@ export interface Fund {
   name: string;
   type: FundType;
   platform: InvestmentPlatform;
-  shares: number;
-  costPerShare: number;
+  cost: number;
   currentValue: number;
   profit: number;
   profitRate: number;

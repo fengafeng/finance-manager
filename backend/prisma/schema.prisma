@@ -48,16 +48,21 @@ enum CleanType {
   DEPOSIT           // 充值
 }
 
-// 基金类型枚举（保留用于兼容，扩展为投资产品类型）
+// 基金类型枚举（重构为投资产品类型）
 enum FundType {
-  STOCK  // 股票型基金
-  BOND   // 债券型基金
-  MIXED  // 混合型基金
-  MONEY  // 货币型基金
-  QDII   // QDII基金
-  WEALTH_MANAGEMENT // 理财产品
-  STOCK_PRODUCT     // 股票
-  OTHER  // 其他
+  STOCK           // 股票型基金
+  BOND            // 债券型基金
+  MIXED           // 混合型基金
+  MONEY           // 货币型基金
+  QDII            // QDII基金
+  INDEX           // 指数型基金
+  WEALTH_MANAGEMENT  // 理财产品
+  STOCK_PRODUCT       // 股票
+  PENSION             // 养老险
+  ANNUITY             // 年金险
+  UNIVERSAL           // 万能险
+  INSURANCE_CASH      // 保险(现金价值型)
+  OTHER           // 其他
 }
 
 // 投资平台枚举
@@ -168,15 +173,14 @@ model Transaction {
   @@map("transactions")
 }
 
-// 基金模型（重构为投资产品，保留表名funds保持向后兼容）
+// 投资产品模型（保留表名funds保持向后兼容）
 model Fund {
   id            String   @id @default(uuid())
   code          String   // 产品代码/持仓编号
   name          String   // 产品名称
   type          FundType @default(MIXED) // 产品类型
   platform      InvestmentPlatform @default(OTHER) // 投资平台
-  shares        Decimal  @default(0) @db.Decimal(15, 4) // 持有份额/数量
-  costPerShare  Decimal  @default(0) @db.Decimal(10, 4) // 成本价
+  cost          Decimal  @default(0) @db.Decimal(15, 2) // 投资成本
   currentValue  Decimal  @default(0) @db.Decimal(15, 2) // 当前市值/净值
   profit        Decimal  @default(0) @db.Decimal(15, 2) // 收益
   profitRate    Decimal  @default(0) @db.Decimal(8, 4) // 收益率

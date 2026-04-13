@@ -13,11 +13,12 @@ export const fundRouter: Router = Router()
 const createFundSchema = z.object({
   code: z.string().min(1).max(50),
   name: z.string().min(1).max(100),
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).default('MIXED'),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'INDEX', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'PENSION', 'ANNUITY', 'UNIVERSAL', 'INSURANCE_CASH', 'OTHER']).default('MIXED'),
   platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).default('OTHER'),
-  shares: z.number().optional().default(0),
-  costPerShare: z.number().optional().default(0),
+  cost: z.number().optional().default(0),
   currentValue: z.number().optional().default(0),
+  profit: z.number().optional().default(0),
+  profitRate: z.number().optional().default(0),
   purchaseDate: z.string().optional(),
   remark: z.string().optional(),
 })
@@ -25,10 +26,9 @@ const createFundSchema = z.object({
 const updateFundSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(100).optional(),
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).optional(),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'INDEX', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'PENSION', 'ANNUITY', 'UNIVERSAL', 'INSURANCE_CASH', 'OTHER']).optional(),
   platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).optional(),
-  shares: z.number().optional(),
-  costPerShare: z.number().optional(),
+  cost: z.number().optional(),
   currentValue: z.number().optional(),
   profit: z.number().optional(),
   profitRate: z.number().optional(),
@@ -36,7 +36,7 @@ const updateFundSchema = z.object({
 })
 
 const listFundsSchema = z.object({
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).optional(),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'INDEX', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'PENSION', 'ANNUITY', 'UNIVERSAL', 'INSURANCE_CASH', 'OTHER']).optional(),
   platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).optional(),
 })
 
@@ -64,8 +64,7 @@ const createFundTransactionSchema = z.object({
 function convertFund(fund: any) {
   return {
     ...fund,
-    shares: Number(fund.shares),
-    costPerShare: Number(fund.costPerShare),
+    cost: Number(fund.cost),
     currentValue: Number(fund.currentValue),
     profit: Number(fund.profit),
     profitRate: Number(fund.profitRate),
@@ -156,15 +155,22 @@ fundRouter.post('/summary', async (_req: Request, res: Response) => {
 fundRouter.post('/create', validate(createFundSchema), async (req: Request, res: Response) => {
   const data = req.body
 
+  // 自动计算收益和收益率
+  const cost = data.cost || 0
+  const currentValue = data.currentValue || 0
+  const profit = currentValue - cost
+  const profitRate = cost > 0 ? (profit / cost) * 100 : 0
+
   const fund = await prisma.fund.create({
     data: {
       code: data.code,
       name: data.name,
       type: data.type,
       platform: data.platform,
-      shares: data.shares,
-      costPerShare: data.costPerShare,
-      currentValue: data.currentValue,
+      cost: cost,
+      currentValue: currentValue,
+      profit: profit,
+      profitRate: profitRate,
       purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : null,
       remark: data.remark,
     },
@@ -212,9 +218,30 @@ fundRouter.post('/get', validate(getFundSchema), async (req: Request, res: Respo
 fundRouter.post('/update', validate(updateFundSchema), async (req: Request, res: Response) => {
   const { id, ...data } = req.body
 
+  // 获取当前产品数据
+  const currentFund = await prisma.fund.findUnique({ where: { id } })
+  if (!currentFund) {
+    res.status(404).json({ success: false, error: '投资产品不存在' })
+    return
+  }
+
+  // 使用新值或保持原值
+  const cost = data.cost ?? Number(currentFund.cost)
+  const currentValue = data.currentValue ?? Number(currentFund.currentValue)
+
+  // 自动计算收益和收益率
+  const profit = currentValue - cost
+  const profitRate = cost > 0 ? (profit / cost) * 100 : 0
+
   const fund = await prisma.fund.update({
     where: { id },
-    data,
+    data: {
+      ...data,
+      cost: cost,
+      currentValue: currentValue,
+      profit: profit,
+      profitRate: profitRate,
+    },
   })
 
   res.json({
