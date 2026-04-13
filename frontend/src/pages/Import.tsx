@@ -38,6 +38,12 @@ import {
   RefreshCw,
   ChevronDown,
 } from 'lucide-react';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 
 // ============================================================
 // 辅助函数

@@ -229,31 +229,20 @@ export default function Funds() {
   const platformSummary = summary?.byPlatform || {};
 
   const handleSubmit = (data: Partial<Fund>) => {
+    const currentVal = data.currentValue || 0;
+    // 如果没填成本，默认成本为当前市值
+    const costVal = (data.cost ?? 0) > 0 ? data.cost! : currentVal;
     // 收益 = 当前市值 - 成本
-    const profit = (data.currentValue || 0) - (data.cost || 0);
+    const profit = currentVal - costVal;
     // 收益率 = 收益 / 成本 * 100
-    const profitRate = (data.cost || 0) > 0 ? (profit / (data.cost || 0)) * 100 : 0;
+    const profitRate = costVal > 0 ? (profit / costVal) * 100 : 0;
 
-    const fundData = {
+    onSubmit({
       ...data,
+      cost: costVal,
       profit,
       profitRate,
-    };
-
-    if (editingFund) {
-      updateMutation.mutate({ id: editingFund.id, ...fundData }, {
-        onSuccess: () => {
-          setDialogOpen(false);
-          setEditingFund(null);
-        },
-      });
-    } else {
-      createMutation.mutate(fundData, {
-        onSuccess: () => {
-          setDialogOpen(false);
-        },
-      });
-    }
+    });
   };
 
   const handleDelete = (id: string) => {

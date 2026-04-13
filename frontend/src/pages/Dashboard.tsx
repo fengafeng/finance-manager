@@ -3,6 +3,8 @@ import { FadeIn, Stagger } from '@/components/MotionPrimitives';
 import { useOverview } from '@/hooks/use-reports';
 import { useAccounts } from '@/hooks/use-accounts';
 import { useFundSummary, useFunds } from '@/hooks/use-funds';
+import { useLoans } from '@/hooks/use-loans';
+import { useBudgets } from '@/hooks/use-budget';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -13,6 +15,8 @@ import {
   ArrowDownRight,
   PiggyBank,
   BarChart3,
+  CreditCard,
+  Scale,
 } from 'lucide-react';
 
 // 格式化金额
@@ -101,8 +105,23 @@ export default function Dashboard() {
   const { data: fundSummary } = useFundSummary();
   const { data: accounts } = useAccounts();
   const { data: funds } = useFunds();
+  const { data: loans } = useLoans();
+  const { data: budgets } = useBudgets(12);
 
   const isLoading = overviewLoading;
+
+  // 计算各类汇总
+  const totalAssets = (accounts || []).reduce((sum, acc) => sum + (acc.balance || 0), 0)
+    + (fundSummary?.totalValue || 0);
+  const totalLiabilities = (loans || []).reduce((sum, loan) => sum + (loan.remainingPrincipal || 0), 0);
+  const netWorth = totalAssets - totalLiabilities;
+
+  // 当月预算对比
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentBudget = budgets?.find(b => b.yearMonth === currentYM);
+  const budgetBalance = (currentBudget?.expectedIncome || 0) - (currentBudget?.expectedExpense || 0);
+  const actualBalance = (currentBudget?.actualIncome ?? overview?.month.income || 0) - (currentBudget?.actualExpense ?? overview?.month.expense || 0);
 
   if (isLoading) {
     return (
@@ -129,30 +148,20 @@ export default function Dashboard() {
         <Stagger className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <FadeIn>
             <StatCard
-              title="总资产"
-              value={formatMoney(overview?.totalWealth || 0)}
-              icon={Wallet}
-              color="primary"
+              title="净资产"
+              value={formatMoney(netWorth)}
+              icon={Scale}
+              color={netWorth >= 0 ? 'primary' : 'destructive'}
             />
           </FadeIn>
           <FadeIn>
             <StatCard
-              title="本月收入"
-              value={formatMoney(overview?.month.income || 0)}
-              icon={TrendingUp}
-              trend="up"
-              trendValue="本月收入"
-              color="success"
-            />
-          </FadeIn>
-          <FadeIn>
-            <StatCard
-              title="本月支出"
-              value={formatMoney(overview?.month.expense || 0)}
-              icon={TrendingDown}
-              trend="down"
-              trendValue={`净收入 ${formatMoney(overview?.month.balance || 0)}`}
-              color="destructive"
+              title="本月净收入"
+              value={formatMoney(overview?.month.balance || 0)}
+              icon={overview?.month.balance >= 0 ? TrendingUp : TrendingDown}
+              trend={overview?.month.balance >= 0 ? 'up' : 'down'}
+              trendValue={`收入 ${formatMoney(overview?.month.income || 0)} / 支出 ${formatMoney(overview?.month.expense || 0)}`}
+              color={overview?.month.balance >= 0 ? 'success' : 'destructive'}
             />
           </FadeIn>
           <FadeIn>
@@ -165,7 +174,79 @@ export default function Dashboard() {
               color={fundSummary && fundSummary.totalProfit >= 0 ? 'success' : 'destructive'}
             />
           </FadeIn>
+          <FadeIn>
+            <StatCard
+              title="负债总计"
+              value={formatMoney(totalLiabilities)}
+              icon={CreditCard}
+              color={totalLiabilities > 0 ? 'warning' : 'success'}
+            />
+          </FadeIn>
         </Stagger>
+
+        {/* 当月预算对比 */}
+        {currentBudget && (
+          <FadeIn>
+            <Card className="bg-gradient-to-r from-primary/10 to-transparent">
+              <CardContent style={{ padding: 'var(--spacing-lg)' }}>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  当月预算对比 ({currentYM})
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  <div>
+                    <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                      预期收入
+                    </p>
+                    <p className="font-bold" style={{ fontSize: 'var(--font-size-label)' }}>
+                      {formatMoney(currentBudget.expectedIncome)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      实际: {formatMoney(currentBudget.actualIncome ?? 0)}
+                      {currentBudget.actualIncome !== null && currentBudget.expectedIncome > 0 && (
+                        <span className={`ml-1 ${(currentBudget.actualIncome / currentBudget.expectedIncome) * 100 >= 100 ? 'text-success' : 'text-warning'}`}>
+                          ({(currentBudget.actualIncome / currentBudget.expectedIncome * 100).toFixed(0)}%)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                      预期支出
+                    </p>
+                    <p className="font-bold" style={{ fontSize: 'var(--font-size-label)' }}>
+                      {formatMoney(currentBudget.expectedExpense)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      实际: {formatMoney(currentBudget.actualExpense ?? 0)}
+                      {currentBudget.actualExpense !== null && currentBudget.expectedExpense > 0 && (
+                        <span className={`ml-1 ${(currentBudget.actualExpense / currentBudget.expectedExpense) * 100 <= 100 ? 'text-success' : 'text-destructive'}`}>
+                          ({(currentBudget.actualExpense / currentBudget.expectedExpense * 100).toFixed(0)}%)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                      预期结余
+                    </p>
+                    <p className="font-bold" style={{ fontSize: 'var(--font-size-label)' }}>
+                      {formatMoney(budgetBalance)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                      实际结余
+                    </p>
+                    <p className={`font-bold ${actualBalance >= 0 ? 'text-success' : 'text-destructive'}`} style={{ fontSize: 'var(--font-size-label)' }}>
+                      {formatMoney(actualBalance)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </FadeIn>
+        )}
 
         {/* 账户列表 */}
         <FadeIn>

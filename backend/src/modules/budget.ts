@@ -20,6 +20,12 @@ const createBudgetSchema = z.object({
   actualIncome: z.number().min(0).optional(),
   actualExpense: z.number().min(0).optional(),
   remark: z.string().optional(),
+  incomeBreakdown: z.object({
+    salary: z.number().min(0).default(0),
+    housingFund: z.number().min(0).default(0),
+    partTime: z.number().min(0).default(0),
+    other: z.number().min(0).default(0),
+  }).optional(),
 })
 
 // ============================================
@@ -57,6 +63,7 @@ budgetRouter.post('/get', async (req: Request, res: Response) => {
       expectedExpense: toNumber(budget.expectedExpense),
       actualIncome: budget.actualIncome ? toNumber(budget.actualIncome) : null,
       actualExpense: budget.actualExpense ? toNumber(budget.actualExpense) : null,
+      incomeBreakdown: budget.incomeBreakdown ? JSON.parse(budget.incomeBreakdown) : null,
     } : null,
   })
 })
@@ -80,6 +87,7 @@ budgetRouter.post('/list', async (req: Request, res: Response) => {
       expectedExpense: toNumber(b.expectedExpense),
       actualIncome: b.actualIncome ? toNumber(b.actualIncome) : null,
       actualExpense: b.actualExpense ? toNumber(b.actualExpense) : null,
+      incomeBreakdown: b.incomeBreakdown ? JSON.parse(b.incomeBreakdown) : null,
     })),
   })
 })
@@ -99,6 +107,7 @@ budgetRouter.post('/upsert', validate(createBudgetSchema), async (req: Request, 
       actualIncome: data.actualIncome,
       actualExpense: data.actualExpense,
       remark: data.remark,
+      incomeBreakdown: data.incomeBreakdown ? JSON.stringify(data.incomeBreakdown) : null,
     },
     update: {
       expectedIncome: data.expectedIncome ?? 0,
@@ -106,6 +115,7 @@ budgetRouter.post('/upsert', validate(createBudgetSchema), async (req: Request, 
       actualIncome: data.actualIncome,
       actualExpense: data.actualExpense,
       remark: data.remark,
+      incomeBreakdown: data.incomeBreakdown ? JSON.stringify(data.incomeBreakdown) : null,
     },
   })
 
@@ -117,6 +127,7 @@ budgetRouter.post('/upsert', validate(createBudgetSchema), async (req: Request, 
       expectedExpense: toNumber(budget.expectedExpense),
       actualIncome: budget.actualIncome ? toNumber(budget.actualIncome) : null,
       actualExpense: budget.actualExpense ? toNumber(budget.actualExpense) : null,
+      incomeBreakdown: budget.incomeBreakdown ? JSON.parse(budget.incomeBreakdown) : null,
     },
   })
 })

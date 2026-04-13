@@ -16,13 +16,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   TrendingUp,
   TrendingDown,
   Plus,
@@ -32,6 +25,10 @@ import {
   PiggyBank,
   Calendar,
   ArrowRight,
+  Wallet,
+  Building2,
+  Briefcase,
+  Gift,
 } from 'lucide-react';
 
 function formatMoney(amount: number) {
@@ -42,6 +39,14 @@ function getCurrentYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// 收入分类配置
+const incomeCategories = [
+  { key: 'salary', label: '月工资', icon: Wallet, color: 'text-success' },
+  { key: 'housingFund', label: '公积金双边', icon: Building2, color: 'text-primary' },
+  { key: 'partTime', label: '兼职收入', icon: Briefcase, color: 'text-warning' },
+  { key: 'other', label: '其他收入', icon: Gift, color: 'text-muted-foreground' },
+];
 
 // 月份预算表单
 function BudgetForm({
@@ -54,17 +59,31 @@ function BudgetForm({
   onCancel: () => void;
 }) {
   const [yearMonth, setYearMonth] = useState(budget?.yearMonth || getCurrentYearMonth());
-  const [expectedIncome, setExpectedIncome] = useState(budget?.expectedIncome?.toString() || '');
   const [expectedExpense, setExpectedExpense] = useState(budget?.expectedExpense?.toString() || '');
   const [remark, setRemark] = useState(budget?.remark || '');
+
+  // 收入分类
+  const [salary, setSalary] = useState(budget?.incomeBreakdown?.salary?.toString() || '');
+  const [housingFund, setHousingFund] = useState(budget?.incomeBreakdown?.housingFund?.toString() || '');
+  const [partTime, setPartTime] = useState(budget?.incomeBreakdown?.partTime?.toString() || '');
+  const [otherIncome, setOtherIncome] = useState(budget?.incomeBreakdown?.other?.toString() || '');
+
+  // 计算总预期收入
+  const totalIncome = (parseFloat(salary) || 0) + (parseFloat(housingFund) || 0) + (parseFloat(partTime) || 0) + (parseFloat(otherIncome) || 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       yearMonth,
-      expectedIncome: parseFloat(expectedIncome) || 0,
+      expectedIncome: totalIncome,
       expectedExpense: parseFloat(expectedExpense) || 0,
       remark: remark || undefined,
+      incomeBreakdown: {
+        salary: parseFloat(salary) || 0,
+        housingFund: parseFloat(housingFund) || 0,
+        partTime: parseFloat(partTime) || 0,
+        other: parseFloat(otherIncome) || 0,
+      },
     });
   };
 
@@ -74,15 +93,45 @@ function BudgetForm({
         <Label>年月</Label>
         <Input type="month" value={yearMonth} onChange={(e) => setYearMonth(e.target.value)} required />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>预期收入</Label>
-          <Input type="number" step="0.01" value={expectedIncome} onChange={(e) => setExpectedIncome(e.target.value)} placeholder="0.00" />
+
+      {/* 收入分类 */}
+      <div className="space-y-3">
+        <Label className="flex items-center gap-2">
+          预期收入分类
+          <Badge variant="outline" className="ml-auto">总计: {formatMoney(totalIncome)}</Badge>
+        </Label>
+        <div className="grid grid-cols-2 gap-3">
+          {incomeCategories.map((cat) => {
+            const value = cat.key === 'salary' ? salary :
+              cat.key === 'housingFund' ? housingFund :
+                cat.key === 'partTime' ? partTime : otherIncome;
+            const setter = cat.key === 'salary' ? setSalary :
+              cat.key === 'housingFund' ? setHousingFund :
+                cat.key === 'partTime' ? setPartTime : setOtherIncome;
+
+            return (
+              <div key={cat.key} className="space-y-1">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <cat.icon className={`h-3 w-3 ${cat.color}`} />
+                  {cat.label}
+                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={value}
+                  onChange={(e) => setter(e.target.value)}
+                  placeholder="0.00"
+                  className="h-8 text-sm"
+                />
+              </div>
+            );
+          })}
         </div>
-        <div className="space-y-2">
-          <Label>预期支出</Label>
-          <Input type="number" step="0.01" value={expectedExpense} onChange={(e) => setExpectedExpense(e.target.value)} placeholder="0.00" />
-        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>预期支出</Label>
+        <Input type="number" step="0.01" value={expectedExpense} onChange={(e) => setExpectedExpense(e.target.value)} placeholder="设置本月支出预算上限" />
       </div>
       <div className="space-y-2">
         <Label>备注</Label>
@@ -170,15 +219,44 @@ export default function Budgets() {
         {/* 当月汇总卡片 */}
         <FadeIn>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
+            {/* 预期收入卡片 */}
+            <Card className="lg:col-span-2">
               <CardContent style={{ padding: 'var(--spacing-lg)' }}>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>预期收入</p>
                   <TrendingUp className="h-4 w-4 text-success" />
                 </div>
-                <p className="font-bold text-lg">{formatMoney(currentExpectedIncome)}</p>
+                <p className="font-bold text-xl">{formatMoney(currentExpectedIncome)}</p>
+                {currentBudget?.incomeBreakdown && (
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                    {currentBudget.incomeBreakdown.salary > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Wallet className="h-3 w-3 text-success" />
+                        <span>工资: {formatMoney(currentBudget.incomeBreakdown.salary)}</span>
+                      </div>
+                    )}
+                    {currentBudget.incomeBreakdown.housingFund > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Building2 className="h-3 w-3 text-primary" />
+                        <span>公积金: {formatMoney(currentBudget.incomeBreakdown.housingFund)}</span>
+                      </div>
+                    )}
+                    {currentBudget.incomeBreakdown.partTime > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Briefcase className="h-3 w-3 text-warning" />
+                        <span>兼职: {formatMoney(currentBudget.incomeBreakdown.partTime)}</span>
+                      </div>
+                    )}
+                    {currentBudget.incomeBreakdown.other > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Gift className="h-3 w-3 text-muted-foreground" />
+                        <span>其他: {formatMoney(currentBudget.incomeBreakdown.other)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {currentActualIncome !== null && (
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-sm text-muted-foreground mt-2">
                     实际：{formatMoney(currentActualIncome)}
                     {incomeRate !== null && <span className={`ml-2 ${incomeRate >= 100 ? 'text-success' : 'text-warning'}`}>{incomeRate.toFixed(0)}%</span>}
                   </p>
