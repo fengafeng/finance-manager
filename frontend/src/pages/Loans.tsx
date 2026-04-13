@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { FadeIn, Stagger } from '@/components/MotionPrimitives';
 import { useLoans, useCreateLoan, useUpdateLoan, useDeleteLoan, usePaymentSchedule, usePrepaySimulate } from '@/hooks/use-loans';
 import { useAccounts } from '@/hooks/use-accounts';
+import { useNaturalAdd, useNaturalCreate } from '@/hooks/use-natural-add';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -36,8 +39,12 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Users,
+  Loader2,
+  Check,
+  X,
 } from 'lucide-react';
 import type { LoanType, LoanDirection, LoanStatus } from '@/types';
+import { toast } from 'sonner';
 
 
 const loanTypeLabels: Record<LoanType, { label: string; icon: React.ElementType; category: 'traditional' | 'credit' }> = {
@@ -56,6 +63,299 @@ const statusColors: Record<LoanStatus, string> = {
   OVERDUE: 'bg-red-100 text-red-700',
   SETTLED: 'bg-green-100 text-green-700',
 };
+
+// 信用账户类型（用于智能添加）
+const CREDIT_LOAN_TYPES: LoanType[] = ['CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY'];
+
+// 贷款专用智能添加对话框（只添加信用卡/花呗等信用账户）
+function LoanNaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [parsedItems, setParsedItems] = useState<any[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const naturalAddMutation = useNaturalAdd();
+  const naturalCreateMutation = useNaturalCreate();
+
+  // 解析文本（只过滤贷款相关内容）
+  const handleParse = async () => {
+    if (!input.trim() || naturalAddMutation.isPending) return;
+
+    try {
+      const result = await naturalAddMutation.mutateAsync(input);
+
+      if (!result.items || result.items.length === 0) {
+        toast.error('无法识别输入内容，请尝试更详细的描述');
+        return;
+      }
+
+      // 只过滤 loan 模块且为信用账户类型的记录
+      const loanItems = result.items
+        .filter((item: any) => {
+          if (item.module !== 'loan') return false;
+          const loanType = item.parsed?.loanType || item.parsed?.type;
+          return CREDIT_LOAN_TYPES.includes(loanType);
+        })
+        .map((item: any, index: number) => ({
+          id: `${Date.now()}-${index}`,
+          module: 'loan',
+          name: item.parsed?.name || item.rawText,
+          loanType: item.parsed?.loanType || item.parsed?.type || 'CREDIT_CARD',
+          principal: item.parsed?.principal || item.parsed?.creditLimit,
+          remainingPrincipal: item.parsed?.remainingPrincipal || item.parsed?.amount,
+          annualRate: item.parsed?.annualRate || 0,
+          billingDate: item.parsed?.billingDate,
+          paymentDueDate: item.parsed?.paymentDueDate,
+          confidence: item.confidence,
+          rawText: item.rawText,
+          selected: true,
+        }));
+
+      if (loanItems.length === 0) {
+        toast.error('未识别到信用卡/花呗等信用账户，请尝试描述如"花呗额度5000"或"信用卡额度20000"');
+        return;
+      }
+
+      setParsedItems([...loanItems, ...parsedItems]);
+      setInput('');
+      toast.success(`成功识别 ${loanItems.length} 条信用账户`);
+    } catch (err: any) {
+      toast.error(err.message || '解析失败，请重试');
+    }
+  };
+
+  const updateItem = (id: string, updates: Partial<any>) => {
+    setParsedItems(items =>
+      items.map(item => (item.id === id ? { ...item, ...updates } : item))
+    );
+  };
+
+  const deleteItem = (id: string) => {
+    setParsedItems(items => items.filter(item => item.id !== id));
+  };
+
+  const handleCreate = async () => {
+    const selectedItems = parsedItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('请至少选择一条记录');
+      return;
+    }
+
+    let successCount = 0;
+    try {
+      for (const item of selectedItems) {
+        await naturalCreateMutation.mutateAsync({
+          module: 'loan',
+          data: {
+            name: item.name,
+            loanType: item.loanType,
+            principal: item.principal || 0,
+            remainingPrincipal: item.remainingPrincipal || item.principal || 0,
+            annualRate: item.annualRate || 0,
+            billingDate: item.billingDate,
+            paymentDueDate: item.paymentDueDate,
+            status: 'PENDING',
+          },
+        });
+        successCount++;
+      }
+
+      toast.success(`成功创建 ${successCount} 条信用账户`);
+      setParsedItems(items => items.filter(item => !item.selected));
+    } catch (err: any) {
+      toast.error(err.message || `创建失败（成功 ${successCount} 条）`);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = parsedItems.every(item => item.selected);
+    setParsedItems(items =>
+      items.map(item => ({ ...item, selected: !allSelected }))
+    );
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    setTimeout(() => {
+      setInput('');
+      setParsedItems([]);
+    }, 200);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      {trigger && (
+        <DialogTrigger asChild onClick={() => setOpen(true)}>
+          {trigger}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            智能添加信用账户
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>输入信用账户描述（支持多条，以换行分隔）</Label>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={`例如：\n花呗额度5000元\n信用卡额度20000元\n白条额度3000元\n抖音月付额度1000`}
+              className="min-h-[100px] resize-none"
+              disabled={naturalAddMutation.isPending}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleParse();
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              按 Ctrl+Enter 快速解析 · 只识别信用卡/花呗/白条/抖音月付
+            </p>
+          </div>
+
+          <Button
+            onClick={handleParse}
+            disabled={!input.trim() || naturalAddMutation.isPending}
+            className="w-full"
+          >
+            {naturalAddMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                解析中...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                智能解析
+              </>
+            )}
+          </Button>
+
+          {parsedItems.length > 0 && (
+            <div className="border rounded-lg p-4 space-y-3 max-h-[400px] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">解析结果</span>
+                  <Badge variant="secondary">{parsedItems.length} 条</Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                    {parsedItems.every(item => item.selected) ? '取消全选' : '全选'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleCreate}
+                    disabled={naturalCreateMutation.isPending || !parsedItems.some(item => item.selected)}
+                  >
+                    {naturalCreateMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        创建中...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        创建 ({parsedItems.filter(item => item.selected).length})
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Stagger className="space-y-2">
+                {parsedItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-3 rounded-lg border ${item.selected ? 'border-primary bg-primary/5' : 'border-muted'}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => updateItem(item.id, { selected: !item.selected })}
+                        className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          item.selected
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground hover:border-primary'
+                        }`}
+                      >
+                        {item.selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                      </button>
+
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">信用账户</Badge>
+                            <Badge variant={item.confidence >= 0.8 ? 'default' : 'secondary'} style={{ fontSize: '11px' }}>
+                              置信度: {Math.round(item.confidence * 100)}%
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive"
+                            onClick={() => deleteItem(item.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <span className="font-medium">{item.name || loanTypeLabels[item.loanType as LoanType]?.label || '未命名'}</span>
+                          {item.principal !== undefined && (
+                            <span className="font-medium">额度 ¥{item.principal.toFixed(2)}</span>
+                          )}
+                          {item.loanType && (
+                            <Badge variant="secondary">{loanTypeLabels[item.loanType as LoanType]?.label || item.loanType}</Badge>
+                          )}
+                        </div>
+
+                        {/* 可编辑字段 */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">额度</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={item.principal || ''}
+                              onChange={(e) => updateItem(item.id, { principal: parseFloat(e.target.value) || 0 })}
+                              className="h-8"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">年利率(%)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={item.annualRate || ''}
+                              onChange={(e) => updateItem(item.id, { annualRate: parseFloat(e.target.value) || 0 })}
+                              placeholder="如 18"
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Stagger>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function formatMoney(amount: number) {
   return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -369,6 +669,14 @@ export default function Loans() {
             <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-body)', marginTop: 'var(--spacing-xs)' }}>信用账户 · 传统贷款 · 借款管理</p>
           </div>
           <div className="flex gap-2">
+            <LoanNaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingLoan(null)}><Plus className="h-4 w-4 mr-2" />新增</Button>

@@ -1,17 +1,20 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { FadeIn, Stagger } from '@/components/MotionPrimitives';
 import { useFunds, useFundSummary, useCreateFund, useUpdateFund, useDeleteFund } from '@/hooks/use-funds';
+import { useNaturalAdd, useNaturalCreate } from '@/hooks/use-natural-add';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -30,8 +33,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
+  Sparkles,
+  Loader2,
+  Check,
+  Calendar,
+  X,
 } from 'lucide-react';
 import type { Fund, FundType, InvestmentPlatform } from '@/types';
+import { toast } from 'sonner';
 
 const fundTypeLabels: Record<FundType, string> = {
   STOCK: '股票型基金',
@@ -68,6 +77,302 @@ function formatMoney(amount: number) {
 function formatPercent(value: number) {
   const sign = value >= 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
+}
+
+// 投资专用智能添加对话框
+function FundNaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [parsedItems, setParsedItems] = useState<any[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const naturalAddMutation = useNaturalAdd();
+  const naturalCreateMutation = useNaturalCreate();
+
+  // 解析文本（只过滤投资相关内容）
+  const handleParse = async () => {
+    if (!input.trim() || naturalAddMutation.isPending) return;
+
+    try {
+      const result = await naturalAddMutation.mutateAsync(input);
+
+      if (!result.items || result.items.length === 0) {
+        toast.error('无法识别输入内容，请尝试更详细的描述');
+        return;
+      }
+
+      // 只过滤 fund 模块的记录
+      const fundItems = result.items
+        .filter((item: any) => item.module === 'fund')
+        .map((item: any, index: number) => ({
+          id: `${Date.now()}-${index}`,
+          module: 'fund',
+          name: item.parsed?.name || item.rawText,
+          type: item.parsed?.type || 'MIXED',
+          cost: item.parsed?.cost,
+          currentValue: item.parsed?.currentValue || item.parsed?.amount,
+          platform: item.parsed?.platform || 'OTHER',
+          code: item.parsed?.code,
+          date: item.parsed?.purchaseDate || item.parsed?.transactionDate,
+          confidence: item.confidence,
+          rawText: item.rawText,
+          selected: true,
+        }));
+
+      if (fundItems.length === 0) {
+        toast.error('未识别到投资产品，请尝试描述买入的基金/理财产品等');
+        return;
+      }
+
+      setParsedItems([...fundItems, ...parsedItems]);
+      setInput('');
+      toast.success(`成功识别 ${fundItems.length} 条投资记录`);
+    } catch (err: any) {
+      toast.error(err.message || '解析失败，请重试');
+    }
+  };
+
+  const updateItem = (id: string, updates: Partial<any>) => {
+    setParsedItems(items =>
+      items.map(item => (item.id === id ? { ...item, ...updates } : item))
+    );
+  };
+
+  const deleteItem = (id: string) => {
+    setParsedItems(items => items.filter(item => item.id !== id));
+  };
+
+  const handleCreate = async () => {
+    const selectedItems = parsedItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('请至少选择一条记录');
+      return;
+    }
+
+    let successCount = 0;
+    try {
+      for (const item of selectedItems) {
+        const currentVal = item.currentValue || 0;
+        const costVal = (item.cost ?? 0) > 0 ? item.cost : currentVal;
+
+        await naturalCreateMutation.mutateAsync({
+          module: 'fund',
+          data: {
+            name: item.name,
+            type: item.type,
+            cost: costVal,
+            currentValue: currentVal,
+            platform: item.platform,
+            code: item.code || item.name,
+            purchaseDate: item.date,
+          },
+        });
+        successCount++;
+      }
+
+      toast.success(`成功创建 ${successCount} 条投资记录`);
+      setParsedItems(items => items.filter(item => !item.selected));
+    } catch (err: any) {
+      toast.error(err.message || `创建失败（成功 ${successCount} 条）`);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = parsedItems.every(item => item.selected);
+    setParsedItems(items =>
+      items.map(item => ({ ...item, selected: !allSelected }))
+    );
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    setTimeout(() => {
+      setInput('');
+      setParsedItems([]);
+    }, 200);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      {trigger && (
+        <DialogTrigger asChild onClick={() => setOpen(true)}>
+          {trigger}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            智能添加投资
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>输入投资描述（支持多条，以换行分隔）</Label>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={`例如：\n买入1000元景顺长城债券\n买入500元余额宝\n持有国民养老4000元`}
+              className="min-h-[100px] resize-none"
+              disabled={naturalAddMutation.isPending}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleParse();
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              按 Ctrl+Enter 快速解析 · 只识别投资产品（基金、理财、股票等）
+            </p>
+          </div>
+
+          <Button
+            onClick={handleParse}
+            disabled={!input.trim() || naturalAddMutation.isPending}
+            className="w-full"
+          >
+            {naturalAddMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                解析中...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                智能解析
+              </>
+            )}
+          </Button>
+
+          {parsedItems.length > 0 && (
+            <div className="border rounded-lg p-4 space-y-3 max-h-[400px] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">解析结果</span>
+                  <Badge variant="secondary">{parsedItems.length} 条</Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                    {parsedItems.every(item => item.selected) ? '取消全选' : '全选'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleCreate}
+                    disabled={naturalCreateMutation.isPending || !parsedItems.some(item => item.selected)}
+                  >
+                    {naturalCreateMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        创建中...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        创建 ({parsedItems.filter(item => item.selected).length})
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Stagger className="space-y-2">
+                {parsedItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-3 rounded-lg border ${item.selected ? 'border-primary bg-primary/5' : 'border-muted'}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => updateItem(item.id, { selected: !item.selected })}
+                        className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          item.selected
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground hover:border-primary'
+                        }`}
+                      >
+                        {item.selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                      </button>
+
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">投资</Badge>
+                            <Badge variant={item.confidence >= 0.8 ? 'default' : 'secondary'} style={{ fontSize: '11px' }}>
+                              置信度: {Math.round(item.confidence * 100)}%
+                            </Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive"
+                            onClick={() => deleteItem(item.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <span className="font-medium">{item.name || '未命名'}</span>
+                          {item.currentValue !== undefined && (
+                            <span className="font-medium">¥{item.currentValue.toFixed(2)}</span>
+                          )}
+                          {item.type && (
+                            <Badge variant="secondary">{fundTypeLabels[item.type as FundType] || item.type}</Badge>
+                          )}
+                          {item.platform && (
+                            <Badge variant="secondary">{platformLabels[item.platform as InvestmentPlatform] || item.platform}</Badge>
+                          )}
+                          {item.date && (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <Calendar className="h-3 w-3" />{item.date}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 可编辑字段 */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">当前市值</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={item.currentValue || ''}
+                              onChange={(e) => updateItem(item.id, { currentValue: parseFloat(e.target.value) || 0 })}
+                              className="h-8"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">投资成本</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={item.cost || ''}
+                              onChange={(e) => updateItem(item.id, { cost: parseFloat(e.target.value) || 0 })}
+                              placeholder="留空则默认=市值"
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </Stagger>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function FundForm({
@@ -280,6 +585,14 @@ export default function Funds() {
             </p>
           </div>
           <div className="flex gap-2">
+            <FundNaturalAddDialog
+              trigger={
+                <Button variant="outline">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  智能添加
+                </Button>
+              }
+            />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingFund(null)}>
