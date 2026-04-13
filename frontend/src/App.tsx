@@ -16,6 +16,7 @@ import Loans from "./pages/Loans";
 import Recurring from "./pages/Recurring";
 import Automation from "./pages/Automation";
 import AIChat from "./pages/AIChat";
+import NaturalAdd from "./pages/NaturalAdd";
 import Budgets from "./pages/Budgets";
 import ProvidentFunds from "./pages/ProvidentFunds";
 import Import from "./pages/Import";
@@ -68,6 +69,7 @@ function App() {
             <Route path="/recurring" data-genie-title="定期账单" data-genie-key="Recurring" element={<PageTransition transition="slide-up"><Recurring /></PageTransition>} />
             <Route path="/automation" data-genie-title="自动化规则" data-genie-key="Automation" element={<PageTransition transition="slide-up"><Automation /></PageTransition>} />
             <Route path="/ai-chat" data-genie-title="AI助手" data-genie-key="AIChat" element={<PageTransition transition="slide-up"><AIChat /></PageTransition>} />
+            <Route path="/natural-add" data-genie-title="智能添加" data-genie-key="NaturalAdd" element={<PageTransition transition="slide-up"><NaturalAdd /></PageTransition>} />
             <Route path="/settings" data-genie-title="系统设置" data-genie-key="Settings" element={<PageTransition transition="fade"><Settings /></PageTransition>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" data-genie-key="NotFound" data-genie-title="Not Found" element={<PageTransition transition="fade"><NotFound /></PageTransition>} />

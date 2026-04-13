@@ -17,6 +17,7 @@ import {
   CalendarClock,
   Zap,
   Bot,
+  Sparkles,
   PiggyBank,
   Building2,
   Upload,
@@ -39,6 +40,7 @@ const navItems = [
   { path: '/recurring', icon: CalendarClock, label: '定期账单' },
   { path: '/automation', icon: Zap, label: '自动化规则' },
   { path: '/ai-chat', icon: Bot, label: 'AI助手' },
+  { path: '/natural-add', icon: Sparkles, label: '智能添加' },
   { path: '/reports', icon: PieChart, label: '报表分析' },
   { path: '/settings', icon: Settings, label: '系统设置' },
 ];

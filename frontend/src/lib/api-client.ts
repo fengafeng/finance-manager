@@ -7,7 +7,7 @@ import axios, { AxiosError } from 'axios';
  */
 export const apiClient = axios.create({
   baseURL: '/api',
-  timeout: 10000,
+  timeout: 60000, // 60秒超时，支持 AI 解析等长时间操作
   headers: {
     'Content-Type': 'application/json',
   },
