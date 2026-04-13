@@ -197,18 +197,22 @@ router.post('/chat', async (req, res) => {
 // ==================== 自然语言创建 ====================
 
 // 自然语言解析系统提示词
-const NATURAL_ADD_SYSTEM_PROMPT = `你是一个财务数据解析助手。用户会输入自然语言描述要创建的数据，你需要将其解析为结构化的JSON对象。
+const NATURAL_ADD_SYSTEM_PROMPT = `你是一个财务数据解析助手。用户会输入自然语言描述要创建的数据，你需要将其解析为结构化的JSON对象数组。
 
-**你的任务是**：分析用户的自然语言输入，识别其意图，并提取关键信息。
+**你的任务是**：分析用户的自然语言输入，识别其中的每一条数据记录，并提取关键信息。
+
+**重要**：用户可能一次输入多条记录，你需要识别所有记录并返回数组。例如：
+- "中行1234余额100，建行5678余额200" → 应返回2条account记录
+- "买了50元菜，转了1000" → 应返回1条transaction记录
 
 ## 支持创建的数据类型（module字段）
 
 1. **account** - 账户
    解析字段：
-   - name: string (必填) - 账户名称
-   - type: string - 账户类型，可选值：ALIPAY/WECHAT/BANK/CREDIT_CARD/CASH/HUABEI/BAITIAO/DOUYIN_PAY/OTHER
-   - balance: number - 当前余额/已用额度
-   - cardNumber: string - 卡号（可选，存储尾号）
+   - name: string (必填) - 账户名称，通常是"银行名+卡号尾号"如"中行1234"
+   - type: string - 账户类型，可选值：ALIPAY(支付宝)/WECHAT(微信)/BANK(银行)/CREDIT_CARD(信用卡)/CASH(现金)/HUABEI(花呗)/BAITIAO(白条)/DOUYIN_PAY(抖音月付)/OTHER
+   - balance: number - 当前余额/已用额度（如"余额92.61元"→ 92.61）
+   - cardNumber: string - 卡号（可选，存储尾号，如"1234"或完整卡号）
    - creditLimit: number - 信用额度（信用卡/花呗/白条可选）
    - billingDate: number - 出账日1-31（可选）
    - paymentDueDate: number - 还款日1-31（可选）
@@ -227,10 +231,9 @@ const NATURAL_ADD_SYSTEM_PROMPT = `你是一个财务数据解析助手。用户
    解析字段：
    - name: string (必填) - 产品名称
    - code: string - 产品代码（可选）
-   - type: string - 产品类型：STOCK/BOND/MIXED/MONEY/QDII/WEALTH_MANAGEMENT/STOCK_PRODUCT/OTHER
+   - type: string - 产品类型：STOCK/BOND/MIXED/MONEY/QDII/WEALTH_MANAGEMENT/STOCK_PRODUCT/INDEX/PENSION/ANNUITY/UNIVERSAL/INSURANCE_CASH/OTHER
    - platform: string - 平台：ALIPAY/WECHAT/TENCENT/JD_FINANCE/BAIDU_WALLET/BANK_APP/FUND_COMPANY/STOCK_BROKER/OTHER
-   - shares: number - 持有份额
-   - costPerShare: number - 成本价（可选）
+   - cost: number - 投资成本/买入金额（可选）
    - currentValue: number - 当前市值（可选）
    - purchaseDate: string - 买入日期（ISO格式，可选）
 
@@ -246,38 +249,92 @@ const NATURAL_ADD_SYSTEM_PROMPT = `你是一个财务数据解析助手。用户
 
 ## 识别规则
 
-1. 提到"添加账户"、"新建账户"、"开个账户" → module: account
+1. 提到"添加账户"、"新建账户"、"开个账户"、"余额" → module: account
 2. 提到"花呗"、"白条"、"信用卡"、"抖音月付" → account 且 type 分别为 HUABEI/BAITIAO/CREDIT_CARD/DOUYIN_PAY
 3. 提到"银行卡"、"储蓄卡" → account 且 type: BANK
-4. 提到"买了"、"定投"、"持有"、"基金"、"理财" → module: fund
+4. 提到"买了"、"定投"、"持有"、"基金"、"理财"、"养老险"、"年金险"、"万能险" → module: fund
 5. 提到"交易"、"消费"、"收入"、"支出"、"转账" → module: transaction
 6. 提到"房贷"、"车贷"、"贷款"、"借了" → module: loan
 
-## 金额识别
+## 金额识别规则
 - 中文数字如"一万"→ 10000，"五千"→ 5000
-- "尾号1234" → cardNumber: "1234"
+- "余额92.61元"、"余额0元"、"余额0.57元" → 提取数字作为 balance
+- "尾号1234"、"卡号1234" → cardNumber: "1234"
 - 日期：今天/昨天/前天 → 对应日期
+
+## 银行卡识别技巧
+- "中行" → name包含"中行"
+- "建行" → name包含"建行"
+- "农商银行" → name包含"农商银行"
+- "工商银行" → name包含"工商银行"
+- "招商银行" → name包含"招商银行"
+- 卡号尾号如"1980948" → 组合为 "中行1980948"
 
 ## 输出格式
 
-请严格返回以下JSON格式，不要输出任何其他内容：
+**重要**：返回JSON数组，每个元素是一条记录。请严格返回以下JSON格式，不要输出任何其他内容：
 \`\`\`json
-{
-  "module": "account|transaction|fund|loan",
-  "confidence": 0.0-1.0,
-  "parsed": {
-    ...根据module类型填充对应字段...
-  },
-  "rawText": "用户原始输入",
-  "ambiguous": false,
-  "needAccountId": false
-}
+[
+  {
+    "module": "account|transaction|fund|loan",
+    "confidence": 0.0-1.0,
+    "parsed": {
+      ...根据module类型填充对应字段...
+    },
+    "rawText": "这条记录对应的原始文本",
+    "ambiguous": false
+  }
+]
 \`\`\`
 
 confidence表示解析置信度，低于0.6时请设置ambiguous: true。
-needAccountId: true 表示交易需要用户确认账户ID。
 
-现在开始解析用户的输入。`;
+**示例输入**：
+"中行 6235736200001980948 余额92.61元，建行 6217001540029439286 余额0，农商银行 6230911099095368020 余额0.57元"
+
+**期望输出**：
+\`\`\`json
+[
+  {
+    "module": "account",
+    "confidence": 0.95,
+    "parsed": {
+      "name": "中行1980948",
+      "type": "BANK",
+      "balance": 92.61,
+      "cardNumber": "1980948"
+    },
+    "rawText": "中行 6235736200001980948 余额92.61元",
+    "ambiguous": false
+  },
+  {
+    "module": "account",
+    "confidence": 0.95,
+    "parsed": {
+      "name": "建行29286",
+      "type": "BANK",
+      "balance": 0,
+      "cardNumber": "29286"
+    },
+    "rawText": "建行 6217001540029439286 余额0",
+    "ambiguous": false
+  },
+  {
+    "module": "account",
+    "confidence": 0.95,
+    "parsed": {
+      "name": "农商银行68020",
+      "type": "BANK",
+      "balance": 0.57,
+      "cardNumber": "68020"
+    },
+    "rawText": "农商银行 6230911099095368020 余额0.57元",
+    "ambiguous": false
+  }
+]
+\`\`\`
+
+现在开始解析用户的输入：`;
 
 // 自然语言创建接口
 router.post('/natural-add', async (req, res) => {
@@ -309,15 +366,25 @@ router.post('/natural-add', async (req, res) => {
       topP: 0.8,
     });
 
-    // 解析 AI 返回的 JSON
+    // 解析 AI 返回的 JSON（可能是数组或单个对象）
     let parsedData: any;
+    let items: any[] = [];
     try {
       // 尝试从返回内容中提取 JSON
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
+        // 返回的是数组
         parsedData = JSON.parse(jsonMatch[0]);
+        items = Array.isArray(parsedData) ? parsedData : [parsedData];
       } else {
-        throw new Error('无法解析返回内容');
+        // 尝试单个对象
+        const objMatch = response.content.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          parsedData = JSON.parse(objMatch[0]);
+          items = [parsedData];
+        } else {
+          throw new Error('无法解析返回内容');
+        }
       }
     } catch (parseError) {
       res.status(500).json({
@@ -328,20 +395,24 @@ router.post('/natural-add', async (req, res) => {
       return;
     }
 
-    // 如果是 transaction 类型，需要获取账户列表让前端匹配
-    let accounts: any[] = [];
-    if (parsedData.module === 'transaction') {
-      accounts = await prisma.account.findMany({
-        select: { id: true, name: true, type: true },
-      });
-    }
+    // 获取账户列表（用于交易匹配）
+    const accounts = await prisma.account.findMany({
+      select: { id: true, name: true, type: true },
+    });
+
+    // 为每个 item 构建消息
+    const itemsWithMessage = items.map(item => ({
+      ...item,
+      accounts: item.module === 'transaction' ? accounts : [],
+      message: buildConfirmationMessage(item),
+    }));
 
     res.json({
       success: true,
       data: {
-        ...parsedData,
+        items: itemsWithMessage,
+        count: itemsWithMessage.length,
         accounts,
-        message: buildConfirmationMessage(parsedData),
       },
     });
   } catch (error: unknown) {

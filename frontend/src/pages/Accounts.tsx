@@ -336,6 +336,20 @@ interface ParsedItem {
   accountId?: string;
   direction?: string;
   counterparty?: string;
+  // 账户特有字段
+  name?: string;
+  cardNumber?: string;
+  creditLimit?: number;
+  // 投资特有字段
+  cost?: number;
+  currentValue?: number;
+  platform?: string;
+  code?: string;
+  // 借款特有字段
+  principal?: number;
+  remainingPrincipal?: number;
+  annualRate?: number;
+  monthlyPayment?: number;
   confidence: number;
   rawText: string;
   selected: boolean;
@@ -352,37 +366,52 @@ function NaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
   const naturalCreateMutation = useNaturalCreate();
   const accountOptions = useAccountOptions();
 
-  // 解析文本
+  // 解析文本（支持多条记录）
   const handleParse = async () => {
     if (!input.trim() || naturalAddMutation.isPending) return;
 
     try {
       const result = await naturalAddMutation.mutateAsync(input);
 
-      if (!result.module) {
+      if (!result.items || result.items.length === 0) {
         toast.error('无法识别输入内容，请尝试更详细的描述');
         return;
       }
 
-      // 创建解析结果项
-      const newItem: ParsedItem = {
-        id: Date.now().toString(),
-        module: result.module,
-        type: result.parsed?.type || '',
-        amount: result.parsed?.amount,
-        category: result.parsed?.category,
-        description: result.parsed?.description,
-        date: result.parsed?.transactionDate || result.parsed?.date,
-        accountId: result.parsed?.accountId || (result.accounts && result.accounts.length > 0 ? result.accounts[0].id : ''),
-        direction: result.parsed?.direction,
-        counterparty: result.parsed?.counterparty,
-        confidence: result.confidence,
-        rawText: result.rawText,
+      // 转换每条解析结果为 ParsedItem
+      const newItems: ParsedItem[] = result.items.map((item, index) => ({
+        id: `${Date.now()}-${index}`,
+        module: item.module,
+        type: item.parsed?.type || item.parsed?.loanType || '',
+        amount: item.parsed?.amount || item.parsed?.balance || item.parsed?.currentValue || item.parsed?.remainingPrincipal,
+        category: item.parsed?.category,
+        description: item.parsed?.description || item.parsed?.name,
+        date: item.parsed?.transactionDate || item.parsed?.startDate || item.parsed?.purchaseDate,
+        accountId: item.parsed?.accountId || (item.accounts && item.accounts.length > 0 ? item.accounts[0].id : ''),
+        direction: item.parsed?.direction,
+        counterparty: item.parsed?.counterparty,
+        // 账户特有字段
+        name: item.parsed?.name,
+        cardNumber: item.parsed?.cardNumber,
+        creditLimit: item.parsed?.creditLimit,
+        // 投资特有字段
+        cost: item.parsed?.cost,
+        currentValue: item.parsed?.currentValue,
+        platform: item.parsed?.platform,
+        code: item.parsed?.code,
+        // 借款特有字段
+        principal: item.parsed?.principal,
+        remainingPrincipal: item.parsed?.remainingPrincipal,
+        annualRate: item.parsed?.annualRate,
+        monthlyPayment: item.parsed?.monthlyPayment,
+        confidence: item.confidence,
+        rawText: item.rawText,
         selected: true,
-      };
+      }));
 
-      setParsedItems([newItem, ...parsedItems]);
+      setParsedItems([...newItems, ...parsedItems]);
       setInput('');
+      toast.success(`成功识别 ${newItems.length} 条记录`);
     } catch (err: any) {
       toast.error(err.message || '解析失败，请重试');
     }
@@ -409,18 +438,57 @@ function NaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
     }
 
     let successCount = 0;
+    let errorCount = 0;
     try {
       for (const item of selectedItems) {
-        const createData: any = {
-          type: item.type,
-          amount: item.amount,
-          category: item.category,
-          description: item.description,
-          transactionDate: item.date,
-          accountId: item.accountId,
-          direction: item.direction,
-          counterparty: item.counterparty,
-        };
+        let createData: any = {};
+
+        // 根据模块类型构建不同的数据
+        switch (item.module) {
+          case 'account':
+            createData = {
+              name: item.name || item.description,
+              type: item.type,
+              balance: item.amount || 0,
+              cardNumber: item.cardNumber,
+              creditLimit: item.creditLimit,
+            };
+            break;
+          case 'transaction':
+            createData = {
+              type: item.type,
+              amount: item.amount,
+              category: item.category,
+              description: item.description,
+              transactionDate: item.date,
+              accountId: item.accountId,
+              direction: item.direction,
+              counterparty: item.counterparty,
+            };
+            break;
+          case 'fund':
+            createData = {
+              name: item.description || item.name,
+              type: item.type,
+              cost: item.cost,
+              currentValue: item.currentValue || item.amount,
+              platform: item.platform,
+              code: item.code,
+              purchaseDate: item.date,
+            };
+            break;
+          case 'loan':
+            createData = {
+              name: item.description || item.name,
+              loanType: item.type,
+              principal: item.principal,
+              remainingPrincipal: item.remainingPrincipal || item.amount,
+              annualRate: item.annualRate,
+              startDate: item.date,
+              monthlyPayment: item.monthlyPayment,
+            };
+            break;
+        }
 
         await naturalCreateMutation.mutateAsync({
           module: item.module,

@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
-// 自然语言解析结果类型
-export interface NaturalAddResult {
+// 单条解析结果类型
+export interface NaturalAddItem {
   module: 'account' | 'transaction' | 'fund' | 'loan';
   confidence: number;
   parsed: Record<string, any>;
@@ -10,6 +10,13 @@ export interface NaturalAddResult {
   ambiguous: boolean;
   accounts?: Array<{ id: string; name: string; type: string }>;
   message: string;
+}
+
+// 解析结果返回类型
+export interface NaturalAddResult {
+  items: NaturalAddItem[];
+  count: number;
+  accounts: Array<{ id: string; name: string; type: string }>;
 }
 
 // 自然语言解析
