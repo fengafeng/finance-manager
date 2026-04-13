@@ -15,12 +15,12 @@ export type ParsedTransaction = {
 
 export function useImportUpload() {
   return useMutation({
-    mutationFn: async ({ file, sourceType, accountId }: { file: File; sourceType: ImportSourceType; accountId?: number }) => {
+    mutationFn: async ({ file, sourceType, accountId }: { file: File; sourceType: ImportSourceType; accountId: string }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('sourceType', sourceType);
       if (accountId) {
-        formData.append('accountId', accountId.toString());
+        formData.append('accountId', accountId);
       }
       const response = await apiClient.post('/import/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -34,7 +34,7 @@ export function useImportPreview(sessionId: string) {
   return useQuery({
     queryKey: ['import-preview', sessionId],
     queryFn: async () => {
-      const response = await apiClient.get(`/import/preview/${sessionId}`);
+      const response = await apiClient.post('/import/preview', { sessionId });
       return response.data;
     },
     enabled: !!sessionId,
@@ -45,7 +45,7 @@ export function useImportConfirm() {
   return useMutation({
     mutationFn: async ({ sessionId, accountId, categoryMapping, skipDuplicates }: { 
       sessionId: string; 
-      accountId: number; 
+      accountId: string; 
       categoryMapping?: Record<string, string>;
       skipDuplicates?: boolean;
     }) => {
