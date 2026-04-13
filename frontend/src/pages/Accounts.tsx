@@ -498,8 +498,8 @@ function NaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
       }
 
       toast.success(`成功创建 ${successCount} 条记录`);
-      // 清空已创建的项
-      setParsedItems(items => items.filter(item => !item.selected));
+      // 清空已创建的项并关闭弹窗
+      handleClose();
     } catch (err: any) {
       toast.error(err.message || `创建失败（成功 ${successCount} 条）`);
     }

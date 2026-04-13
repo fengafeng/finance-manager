@@ -398,7 +398,7 @@ function StepPreview({
       {/* 时间范围 */}
       <FadeIn>
         <p className="text-sm text-muted-foreground text-center">
-          账单时间范围：{data.dateRange?.start || '-'} ~ {data.dateRange?.end || '-'}
+          账单时间范围：{transactions.length > 0 ? `${transactions[transactions.length - 1]?.date || '-'} ~ ${transactions[0]?.date || '-'}` : '-'}
         </p>
       </FadeIn>
 

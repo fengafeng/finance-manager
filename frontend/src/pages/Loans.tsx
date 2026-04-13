@@ -161,7 +161,7 @@ function LoanNaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
       }
 
       toast.success(`成功创建 ${successCount} 条信用账户`);
-      setParsedItems(items => items.filter(item => !item.selected));
+      handleClose();
     } catch (err: any) {
       toast.error(err.message || `创建失败（成功 ${successCount} 条）`);
     }
