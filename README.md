@@ -41,10 +41,24 @@
 ### 环境要求
 
 - Node.js >= 18.0.0
-- pnpm >= 8.0.0
+- pnpm >= 8.0.0（自动安装）
 - PostgreSQL >= 14.0
 
-### 一键部署
+### Windows 一键部署
+
+```powershell
+# 1. 克隆项目
+git clone https://github.com/fengafeng/finance-manager.git
+cd finance-manager
+
+# 2. 以管理员身份运行部署脚本
+scripts\setup.bat
+
+# 3. 启动开发服务器
+scripts\dev.bat
+```
+
+### macOS / Linux 部署
 
 ```bash
 # 1. 克隆项目
@@ -62,6 +76,15 @@ cd finance-manager
 
 - 前端：http://localhost:5173
 - 后端API：http://localhost:3000/api
+
+## 📁 脚本说明
+
+| 脚本 | Windows | Linux/macOS | 说明 |
+|------|---------|-------------|------|
+| 一键部署 | `scripts\setup.bat` | `./scripts/setup.sh` | 环境配置、依赖安装、数据库初始化 |
+| 开发启动 | `scripts\dev.bat` | `./scripts/dev.sh` | 启动前后端开发服务器 |
+| 生产启动 | `scripts\start.bat` | `./scripts/start.sh` | 启动生产环境服务 |
+| 停止服务 | `scripts\stop.bat` | `./scripts/stop.sh` | 停止所有服务 |
 
 ## 🛠 技术栈
 
@@ -95,18 +118,18 @@ finance-manager/
 │   │   └── config/       # 配置
 │   └── prisma/           # 数据库模型
 ├── scripts/           # 部署脚本
-│   ├── setup.sh       # 一键部署
-│   ├── dev.sh         # 开发启动
-│   ├── start.sh       # 生产启动
-│   └── stop.sh        # 停止服务
+│   ├── setup.bat/.sh     # 一键部署
+│   ├── dev.bat/.sh       # 开发启动
+│   ├── start.bat/.sh     # 生产启动
+│   └── stop.bat/.sh      # 停止服务
 └── docs/              # 文档目录
 ```
 
 ## 📚 文档
 
 - [开发文档](docs/development.md) - 详细的开发指南
+- [使用文档](docs/usage.md) - 用户使用指南
 - [API文档](docs/api.md) - 后端API接口说明
-- [部署文档](docs/deployment.md) - 生产环境部署指南
 
 ## 📄 License
 

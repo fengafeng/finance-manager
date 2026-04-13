@@ -3,6 +3,6 @@
   "sub_project_type": "",
   "name": "财务管家",
   "app_slug": "finance-manager",
-  "version_description": "二期开发完成：AI助手、贷款管理、定期账单、自动化规则",
+  "version_description": "项目已推送到GitHub，包含完整部署脚本和文档",
   "preview_type": "pc"
 }
