@@ -48,7 +48,7 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/YOUR_USERNAME/finance-manager.git
+git clone https://github.com/fengafeng/finance-manager.git
 cd finance-manager
 
 # 2. 运行部署脚本
