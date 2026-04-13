@@ -121,7 +121,7 @@ export default function Dashboard() {
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const currentBudget = budgets?.find(b => b.yearMonth === currentYM);
   const budgetBalance = (currentBudget?.expectedIncome || 0) - (currentBudget?.expectedExpense || 0);
-  const actualBalance = (currentBudget?.actualIncome ?? overview?.month.income || 0) - (currentBudget?.actualExpense ?? overview?.month.expense || 0);
+  const actualBalance = ((currentBudget?.actualIncome ?? overview?.month.income) || 0) - ((currentBudget?.actualExpense ?? overview?.month.expense) || 0);
 
   if (isLoading) {
     return (
