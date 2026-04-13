@@ -14,7 +14,7 @@ import NetWorth from "./pages/NetWorth";
 import Health from "./pages/Health";
 import Loans from "./pages/Loans";
 import Recurring from "./pages/Recurring";
-import Automation from "./pages/Automation";
+
 import AIChat from "./pages/AIChat";
 import Budgets from "./pages/Budgets";
 import ProvidentFunds from "./pages/ProvidentFunds";
@@ -64,7 +64,6 @@ function App() {
             <Route path="/provident-funds" data-genie-title="公积金账户" data-genie-key="ProvidentFunds" element={<PageTransition transition="slide-up"><ProvidentFunds /></PageTransition>} />
             <Route path="/import" data-genie-title="账单导入" data-genie-key="Import" element={<PageTransition transition="slide-up"><Import /></PageTransition>} />
             <Route path="/recurring" data-genie-title="定期账单" data-genie-key="Recurring" element={<PageTransition transition="slide-up"><Recurring /></PageTransition>} />
-            <Route path="/automation" data-genie-title="自动化规则" data-genie-key="Automation" element={<PageTransition transition="slide-up"><Automation /></PageTransition>} />
             <Route path="/ai-chat" data-genie-title="AI助手" data-genie-key="AIChat" element={<PageTransition transition="slide-up"><AIChat /></PageTransition>} />
             <Route path="/settings" data-genie-title="系统设置" data-genie-key="Settings" element={<PageTransition transition="fade"><Settings /></PageTransition>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

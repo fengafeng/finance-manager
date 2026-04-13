@@ -1,24 +1,51 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
-export type ImportSourceType = 'ALIPAY' | 'WECHAT' | 'BANK' | 'OTHER';
-export type ParsedTransaction = {
-  id?: number;
+export type ImportSourceType = 'ALIPAY' | 'WECHAT' | 'BANK';
+
+export type CleanedTransaction = {
   date: string;
-  description: string;
+  type: 'INCOME' | 'EXPENSE';
   amount: number;
-  type: 'INCOME' | 'EXPENSE' | 'TRANSFER';
-  category?: string;
-  account?: string;
-  parsed?: boolean;
+  category: string;
+  merchant: string;
+  description: string;
+  paymentMethod: string;
+  cleanType: 'REFUND' | 'INTERNAL_TRANSFER' | 'DEPOSIT' | null;
+  cleanReason: string | null;
+};
+
+export type ImportStats = {
+  total: number;
+  income: number;
+  expense: number;
+  cleanedByRefund: number;
+  cleanedByTransfer: number;
+  cleanedByDeposit: number;
+};
+
+export type UploadResult = {
+  sessionId: string;
+  fileName: string;
+  totalRecords: number;
+  income: number;
+  expense: number;
+  stats: ImportStats;
+  dateRange: { start: string; end: string };
+  preview: CleanedTransaction[];
+};
+
+export type PreviewResult = {
+  sessionId: string;
+  transactions: CleanedTransaction[];
+  stats: ImportStats;
 };
 
 export function useImportUpload() {
   return useMutation({
-    mutationFn: async ({ file, sourceType, accountId }: { file: File; sourceType: ImportSourceType; accountId: string }) => {
+    mutationFn: async ({ file, accountId }: { file: File; accountId: string }) => {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('sourceType', sourceType);
       if (accountId) {
         formData.append('accountId', accountId);
       }
@@ -43,33 +70,17 @@ export function useImportPreview(sessionId: string) {
 
 export function useImportConfirm() {
   return useMutation({
-    mutationFn: async ({ sessionId, accountId, categoryMapping, skipDuplicates }: { 
-      sessionId: string; 
-      accountId: string; 
-      categoryMapping?: Record<string, string>;
-      skipDuplicates?: boolean;
+    mutationFn: async ({ sessionId, accountId, importCleaned }: {
+      sessionId: string;
+      accountId: string;
+      importCleaned?: boolean;
     }) => {
       const response = await apiClient.post('/import/confirm', {
         sessionId,
         accountId,
-        categoryMapping,
-        skipDuplicates,
+        importCleaned,
       });
       return response.data;
     },
   });
-}
-
-export function useImportHistory() {
-  return useQuery({
-    queryKey: ['import-history'],
-    queryFn: async () => {
-      const response = await apiClient.get('/import/history');
-      return response.data || [];
-    },
-  });
-}
-
-export function downloadTemplate(sourceType: ImportSourceType) {
-  window.open(`/api/import/template/${sourceType}`, '_blank');
 }

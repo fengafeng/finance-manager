@@ -321,22 +321,6 @@ model RecurringBill {
   @@map("recurring_bills")
 }
 
-// 自动化规则模型
-model AutomationRule {
-  id            String   @id @default(uuid())
-  name          String   // 规则名称
-  triggerType   String   // 触发类型
-  triggerConfig String   // JSON: 触发条件配置
-  actionType    String   // 动作类型
-  actionConfig  String   // JSON: 动作配置
-  priority      Int      @default(0) // 优先级
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("automation_rules")
-}
-
 // 贷款模型
 model Loan {
   id                  String   @id @default(uuid())

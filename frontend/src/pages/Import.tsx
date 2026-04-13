@@ -5,10 +5,8 @@ import {
   useImportUpload,
   useImportPreview,
   useImportConfirm,
-  useImportHistory,
-  downloadTemplate,
-  ParsedTransaction,
-  ImportSourceType,
+  CleanedTransaction,
+  UploadResult,
 } from '@/hooks/use-import';
 import { useAccounts } from '@/hooks/use-accounts';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,19 +29,13 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowLeft,
-  Download,
-  History,
   Loader2,
   X,
   RefreshCw,
   ChevronDown,
+  Trash2,
 } from 'lucide-react';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { toast } from 'sonner';
 
 // ============================================================
 // 辅助函数
@@ -59,42 +51,6 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
-const sourceTypeLabels: Record<ImportSourceType, { label: string; icon: string; desc: string }> = {
-  ALIPAY: { label: '支付宝', icon: '💰', desc: '导出「明细记录」CSV 文件' },
-  WECHAT: { label: '微信支付', icon: '💬', desc: '导出「交易记录」CSV 文件' },
-  BANK: { label: '银行账单', icon: '🏦', desc: '导出银行流水 CSV 文件' },
-  OTHER: { label: '其他', icon: '📄', desc: '导入其他格式的账单文件' },
-};
-
-const categoryOptions = [
-  '餐饮', '交通', '购物', '娱乐', '居住', '通讯', '医疗', '教育', '工资', '奖金',
-  '投资收益', '转账', '还款', '投资', '其他',
-];
-
-// 商家自动分类建议
-const merchantCategoryMap: Record<string, string> = {
-  '工资': '工资', '薪资': '工资',
-  '奖金': '奖金', '年终奖': '奖金',
-  '利息': '投资收益', '理财': '投资收益',
-  '餐饮': '餐饮', '美食': '餐饮', '超市': '餐饮', '便利店': '餐饮',
-  '饿了么': '餐饮', '美团': '餐饮', '肯德基': '餐饮', '麦当劳': '餐饮',
-  '地铁': '交通', '公交': '交通', '打车': '交通', '滴滴': '交通', '停车': '交通',
-  '淘宝': '购物', '天猫': '购物', '京东': '购物', '拼多多': '购物',
-  '电影': '娱乐', '游戏': '娱乐', 'KTV': '娱乐',
-  '房租': '居住', '物业': '居住', '水电': '居住',
-  '话费': '通讯', '流量': '通讯',
-  '医院': '医疗', '药店': '医疗',
-  '学费': '教育', '培训': '教育', '课程': '教育',
-};
-
-function autoSuggestCategory(merchant: string): string {
-  if (!merchant) return '其他';
-  for (const [key, category] of Object.entries(merchantCategoryMap)) {
-    if (merchant.includes(key)) return category;
-  }
-  return '其他';
-}
-
 // ============================================================
 // 步骤 1：上传文件
 // ============================================================
@@ -102,9 +58,8 @@ function autoSuggestCategory(merchant: string): string {
 function StepUpload({
   onUploaded,
 }: {
-  onUploaded: (sessionId: string, info: any) => void;
+  onUploaded: (sessionId: string, accountId: string) => void;
 }) {
-  const [sourceType, setSourceType] = useState<ImportSourceType>('ALIPAY');
   const [accountId, setAccountId] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -127,56 +82,42 @@ function StepUpload({
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      alert('请选择要上传的账单文件');
+      toast.error('请选择要上传的账单文件');
       return;
     }
     if (!accountId) {
-      alert('请先选择要导入到的账户');
+      toast.error('请先选择要导入到的账户');
       return;
     }
+
     try {
       const result = await uploadMutation.mutateAsync({
         file: selectedFile,
-        sourceType,
         accountId,
       });
-      // API 返回格式: { success: true, data: { sessionId, ... } }
       const sessionId = result.data?.sessionId || result.sessionId;
-      onUploaded(sessionId, result);
-    } catch (err) {
-      // 错误由 mutation 处理
+      if (sessionId) {
+        onUploaded(sessionId, accountId);
+        toast.success('账单解析成功');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || '上传失败');
     }
   };
 
   const isLoading = uploadMutation.isPending;
-  const error = uploadMutation.error;
 
   return (
     <div className="space-y-6">
-      {/* 来源选择 */}
+      {/* 提示信息 */}
       <FadeIn>
-        <div className="space-y-3">
-          <Label>账单来源</Label>
-          <div className="grid grid-cols-3 gap-3">
-            {(Object.keys(sourceTypeLabels) as ImportSourceType[]).map((type) => {
-              const info = sourceTypeLabels[type];
-              return (
-                <button
-                  key={type}
-                  onClick={() => setSourceType(type)}
-                  className={`p-4 rounded-lg border-2 text-left transition-all ${
-                    sourceType === type
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">{info.icon}</div>
-                  <div className="font-medium">{info.label}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{info.desc}</div>
-                </button>
-              );
-            })}
-          </div>
+        <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <strong>支持格式：</strong>支付宝 CSV 文件、微信支付 Excel 文件
+          </p>
+          <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+            <strong>自动清洗：</strong>退款记录、账户间转账将被标记，可在预览中查看
+          </p>
         </div>
       </FadeIn>
 
@@ -192,22 +133,17 @@ function StepUpload({
             <option value="">请选择账户</option>
             {accounts?.map((acc) => (
               <option key={acc.id} value={acc.id}>
-                {acc.name}
+                {acc.name} ({acc.type === 'ALIPAY' ? '支付宝' : acc.type === 'WECHAT' ? '微信' : '其他'})
               </option>
             ))}
           </select>
-          {!accounts?.length && (
-            <p className="text-xs text-muted-foreground">
-              请先在「账户管理」中添加对应类型的账户
-            </p>
-          )}
         </div>
       </FadeIn>
 
       {/* 文件拖放区 */}
       <FadeIn>
         <div
-          className={`relative rounded-lg border-2 border-dashed p-8 text-center transition-all ${
+          className={`relative rounded-lg border-2 border-dashed p-8 text-center transition-all cursor-pointer ${
             isDragging
               ? 'border-primary bg-primary/5'
               : selectedFile
@@ -222,7 +158,7 @@ function StepUpload({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.xlsx,.xls"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -237,7 +173,7 @@ function StepUpload({
                 </p>
               </div>
               <button
-                className="ml-auto p-1 hover:bg-muted rounded"
+                className="ml-4 p-1 hover:bg-muted rounded"
                 onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
               >
                 <X className="h-4 w-4" />
@@ -246,32 +182,12 @@ function StepUpload({
           ) : (
             <>
               <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="font-medium">拖拽 CSV 文件到此处</p>
-              <p className="text-sm text-muted-foreground mt-1">或点击选择文件</p>
+              <p className="font-medium">拖拽账单文件到此处</p>
+              <p className="text-sm text-muted-foreground mt-1">支持 CSV、Excel 格式</p>
             </>
           )}
         </div>
       </FadeIn>
-
-      {/* 下载模板 */}
-      <FadeIn className="flex justify-center">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => downloadTemplate(sourceType)}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          下载 {sourceTypeLabels[sourceType].label} 导入模板
-        </Button>
-      </FadeIn>
-
-      {/* 错误提示 */}
-      {error && (
-        <FadeIn className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>{String(uploadMutation.error)}</span>
-        </FadeIn>
-      )}
 
       {/* 上传按钮 */}
       <FadeIn>
@@ -304,18 +220,19 @@ function StepUpload({
 
 function StepPreview({
   sessionId,
+  accountId,
   onBack,
   onConfirmed,
 }: {
   sessionId: string;
+  accountId: string;
   onBack: () => void;
   onConfirmed: (result: any) => void;
 }) {
-  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [importCleaned, setImportCleaned] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const { data, isLoading, error } = useImportPreview(sessionId);
   const confirmMutation = useImportConfirm();
-  const [categoryOverrides, setCategoryOverrides] = useState<Record<number, string>>({});
-  const [showAll, setShowAll] = useState(false);
 
   if (isLoading) {
     return (
@@ -340,31 +257,28 @@ function StepPreview({
     );
   }
 
-  const transactions = data.transactions || [];
-  const displayTransactions = showAll ? transactions : transactions.slice(0, 50);
+  const result = data.data || data;
+  const transactions: CleanedTransaction[] = result.transactions || [];
+  const stats = result.stats || { total: 0, income: 0, expense: 0, cleanedByRefund: 0, cleanedByTransfer: 0, cleanedByDeposit: 0 };
+
+  // 分离正常记录和清洗记录
+  const normalTransactions = transactions.filter(t => !t.cleanType);
+  const cleanedTransactions = transactions.filter(t => t.cleanType);
+  const displayTransactions = showAll ? transactions : normalTransactions.slice(0, 30);
 
   const handleConfirm = async () => {
-    // 构建分类映射（只包含用户修改过的）
-    const mapping: Record<string, string> = {};
-    for (const [idx, cat] of Object.entries(categoryOverrides)) {
-      const tx = transactions[parseInt(idx)];
-      if (tx) mapping[tx.merchant] = cat;
-    }
-
     try {
       const result = await confirmMutation.mutateAsync({
         sessionId,
-        accountId: data.accountId,
-        categoryMapping: mapping,
-        skipDuplicates,
+        accountId,
+        importCleaned,
       });
-      onConfirmed(result);
-    } catch (err) {
-      // 错误由 mutation 处理
+      const res = result.data || result;
+      onConfirmed(res);
+    } catch (err: any) {
+      toast.error(err?.message || '导入失败');
     }
   };
-
-  const confirmError = confirmMutation.error;
 
   return (
     <div className="space-y-4">
@@ -373,140 +287,128 @@ function StepPreview({
         <div className="grid grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold">{data.totalCount}</p>
+              <p className="text-2xl font-bold">{stats.total}</p>
               <p className="text-xs text-muted-foreground">总记录</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-success">
-                {transactions.filter((t: ParsedTransaction) => t.type === 'INCOME').length}
+              <p className="text-2xl font-bold text-emerald-500">
+                {stats.income.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground">收入</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-destructive">
-                {transactions.filter((t: ParsedTransaction) => t.type === 'EXPENSE').length}
+              <p className="text-2xl font-bold text-red-500">
+                {stats.expense.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground">支出</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-amber-50 dark:bg-amber-950/30">
             <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-warning">
-                {transactions.filter((t: ParsedTransaction) => t.status === 'refund').length}
+              <p className="text-2xl font-bold text-amber-600">
+                {stats.cleanedByRefund + stats.cleanedByTransfer + stats.cleanedByDeposit}
               </p>
-              <p className="text-xs text-muted-foreground">退款</p>
+              <p className="text-xs text-muted-foreground">已清洗</p>
             </CardContent>
           </Card>
         </div>
       </FadeIn>
 
-      {/* 时间范围 */}
-      <FadeIn>
-        <p className="text-sm text-muted-foreground text-center">
-          账单时间范围：{transactions.length > 0 ? `${transactions[transactions.length - 1]?.date || '-'} ~ ${transactions[0]?.date || '-'}` : '-'}
-        </p>
-      </FadeIn>
+      {/* 清洗统计 */}
+      {(stats.cleanedByRefund > 0 || stats.cleanedByTransfer > 0 || stats.cleanedByDeposit > 0) && (
+        <FadeIn>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">自动清洗记录</p>
+            <div className="flex gap-4 text-xs">
+              {stats.cleanedByRefund > 0 && (
+                <span className="text-amber-700 dark:text-amber-300">
+                  退款: {stats.cleanedByRefund} 笔
+                </span>
+              )}
+              {stats.cleanedByTransfer > 0 && (
+                <span className="text-amber-700 dark:text-amber-300">
+                  内部转账: {stats.cleanedByTransfer} 笔
+                </span>
+              )}
+              {stats.cleanedByDeposit > 0 && (
+                <span className="text-amber-700 dark:text-amber-300">
+                  充值提现: {stats.cleanedByDeposit} 笔
+                </span>
+              )}
+            </div>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={importCleaned}
+                onChange={(e) => setImportCleaned(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-xs">同时导入清洗记录（用于统计）</span>
+            </label>
+          </div>
+        </FadeIn>
+      )}
 
       {/* 交易列表 */}
       <FadeIn>
+        <p className="text-sm text-muted-foreground mb-2">
+          预览前 {Math.min(30, normalTransactions.length)} 条记录（点击展开查看全部）
+        </p>
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {displayTransactions.map((tx: ParsedTransaction, idx: number) => {
-            const suggestedCategory = autoSuggestCategory(tx.merchant);
-            const selectedCategory = categoryOverrides[idx] ?? suggestedCategory;
-
-            return (
-              <div
-                key={idx}
-                className={`flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors ${
-                  tx.status === 'refund' ? 'border border-warning/30' : ''
-                }`}
-              >
-                {/* 日期 */}
-                <div className="w-20 shrink-0">
-                  <p className="text-xs">{formatDate(tx.date)}</p>
-                </div>
-
-                {/* 商家/描述 */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{tx.merchant || tx.description || '-'}</p>
-                  {tx.merchant && tx.description && tx.merchant !== tx.description && (
-                    <p className="text-xs text-muted-foreground truncate">{tx.description}</p>
-                  )}
-                </div>
-
-                {/* 分类选择 */}
-                <div className="w-24 shrink-0">
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setCategoryOverrides({ ...categoryOverrides, [idx]: e.target.value })}
-                    className="w-full h-7 px-1 text-xs rounded border border-input bg-background"
-                  >
-                    {categoryOptions.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 金额 */}
-                <div className={`w-24 text-right shrink-0 ${
-                  tx.type === 'INCOME' ? 'text-success' : 'text-destructive'
-                }`}>
-                  <p className="font-medium text-sm">
-                    {tx.type === 'INCOME' ? '+' : '-'}
-                    {formatMoney(tx.amount)}
-                  </p>
-                </div>
-
-                {/* 标签 */}
-                <div className="w-16 shrink-0">
-                  {tx.status === 'refund' && (
-                    <Badge variant="outline" className="text-warning border-warning text-xs">
-                      退款
-                    </Badge>
-                  )}
-                </div>
+          {displayTransactions.map((tx: CleanedTransaction, idx: number) => (
+            <div
+              key={idx}
+              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+            >
+              {/* 日期 */}
+              <div className="w-20 shrink-0">
+                <p className="text-xs">{formatDate(tx.date)}</p>
               </div>
-            );
-          })}
+
+              {/* 商家/描述 */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{tx.merchant || '-'}</p>
+                {tx.description && (
+                  <p className="text-xs text-muted-foreground truncate">{tx.description}</p>
+                )}
+              </div>
+
+              {/* 分类 */}
+              <div className="w-20 shrink-0">
+                <Badge variant="outline" className="text-xs">
+                  {tx.category || '其他'}
+                </Badge>
+              </div>
+
+              {/* 金额 */}
+              <div className={`w-24 text-right shrink-0 ${
+                tx.type === 'INCOME' ? 'text-emerald-500' : 'text-red-500'
+              }`}>
+                <p className="font-medium text-sm">
+                  {tx.type === 'INCOME' ? '+' : '-'}
+                  {formatMoney(tx.amount)}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {transactions.length > 50 && !showAll && (
+        {normalTransactions.length > 30 && !showAll && (
           <Button
             variant="ghost"
             size="sm"
-            className="w-full"
+            className="w-full mt-2"
             onClick={() => setShowAll(true)}
           >
             <ChevronDown className="h-4 w-4 mr-2" />
-            查看全部 {transactions.length} 条记录
+            查看全部 {normalTransactions.length} 条记录
           </Button>
         )}
       </FadeIn>
-
-      {/* 去重选项 */}
-      <FadeIn>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={skipDuplicates}
-            onChange={(e) => setSkipDuplicates(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">跳过与现有记录重复的交易</span>
-        </label>
-      </FadeIn>
-
-      {/* 错误 */}
-      {confirmError && (
-        <FadeIn className="p-3 bg-destructive/10 text-destructive rounded-lg text-sm flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>{String(confirmMutation.error)}</span>
-        </FadeIn>
-      )}
 
       {/* 操作按钮 */}
       <FadeIn className="flex gap-3">
@@ -526,7 +428,7 @@ function StepPreview({
             </>
           ) : (
             <>
-              确认导入 {transactions.length} 条记录
+              确认导入 {normalTransactions.length} 条记录
               <Check className="h-4 w-4 ml-2" />
             </>
           )}
@@ -540,35 +442,30 @@ function StepPreview({
 // 步骤 3：完成
 // ============================================================
 
-function StepComplete({ result, onDone, onImportMore }: { result: any; onDone: () => void; onImportMore: () => void }) {
+function StepComplete({
+  result,
+  onDone,
+  onImportMore,
+}: {
+  result: any;
+  onDone: () => void;
+  onImportMore: () => void;
+}) {
+  const res = result.data || result;
+
   return (
     <div className="text-center py-8 space-y-4">
-      <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto">
-        <Check className="h-8 w-8 text-success" />
+      <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto">
+        <Check className="h-8 w-8 text-emerald-600" />
       </div>
       <div>
         <h2 className="text-xl font-bold">导入完成</h2>
         <p className="text-muted-foreground mt-2">
-          成功导入 <span className="font-bold text-success">{result.successCount}</span> 条记录
-          {result.skipCount > 0 && (
-            <span className="text-muted-foreground">，跳过 {result.skipCount} 条重复记录</span>
+          成功导入 <span className="font-bold text-emerald-600">{res.importedCount}</span> 条记录
+          {res.skippedCount > 0 && (
+            <span className="text-muted-foreground">，跳过 {res.skippedCount} 条清洗记录</span>
           )}
         </p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 mt-6 max-w-md mx-auto">
-        <div className="p-4 rounded-lg bg-muted/50">
-          <p className="text-2xl font-bold">{result.totalCount}</p>
-          <p className="text-xs text-muted-foreground">总记录</p>
-        </div>
-        <div className="p-4 rounded-lg bg-success/10">
-          <p className="text-2xl font-bold text-success">{result.successCount}</p>
-          <p className="text-xs text-muted-foreground">已导入</p>
-        </div>
-        <div className="p-4 rounded-lg bg-warning/10">
-          <p className="text-2xl font-bold text-warning">{result.skipCount}</p>
-          <p className="text-xs text-muted-foreground">已跳过</p>
-        </div>
       </div>
 
       <div className="flex gap-3 justify-center mt-6">
@@ -586,71 +483,6 @@ function StepComplete({ result, onDone, onImportMore }: { result: any; onDone: (
 }
 
 // ============================================================
-// 导入历史
-// ============================================================
-
-function ImportHistory() {
-  const { data: records, isLoading } = useImportHistory();
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {[...Array(3)].map((_, i) => (
-          <Skeleton key={i} className="h-20" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!records?.length) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>暂无导入记录</p>
-      </div>
-    );
-  }
-
-  return (
-    <Stagger className="space-y-3">
-      {records.map((record) => (
-        <FadeIn key={record.id}>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">
-                    {record.sourceType === 'IMPORT_ALIPAY' ? '💰' :
-                     record.sourceType === 'IMPORT_WECHAT' ? '💬' : '🏦'}
-                  </div>
-                  <div>
-                    <p className="font-medium">{record.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(record.createdAt).toLocaleString('zh-CN')}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <Badge variant={record.status === 'COMPLETED' ? 'default' : 'destructive'}>
-                    {record.status === 'COMPLETED' ? '完成' : '失败'}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    成功 {record.successCount} / 总计 {record.totalCount}
-                  </p>
-                </div>
-              </div>
-              {record.errorMessage && (
-                <p className="text-xs text-destructive mt-2">{record.errorMessage}</p>
-              )}
-            </CardContent>
-          </Card>
-        </FadeIn>
-      ))}
-    </Stagger>
-  );
-}
-
-// ============================================================
 // 主页面
 // ============================================================
 
@@ -659,19 +491,19 @@ type Step = 'upload' | 'preview' | 'complete';
 export default function Import() {
   const [step, setStep] = useState<Step>('upload');
   const [sessionId, setSessionId] = useState('');
-  const [uploadInfo, setUploadInfo] = useState<any>(null);
+  const [accountId, setAccountId] = useState('');
   const [importResult, setImportResult] = useState<any>(null);
 
-  const handleUploaded = (id: string, info: any) => {
+  const handleUploaded = (id: string, accId: string) => {
     setSessionId(id);
-    setUploadInfo(info);
+    setAccountId(accId);
     setStep('preview');
   };
 
   const handleBack = () => {
     setStep('upload');
     setSessionId('');
-    setUploadInfo(null);
+    setAccountId('');
   };
 
   const handleConfirmed = (result: any) => {
@@ -682,14 +514,14 @@ export default function Import() {
   const handleDone = () => {
     setStep('upload');
     setSessionId('');
-    setUploadInfo(null);
+    setAccountId('');
     setImportResult(null);
   };
 
   const handleImportMore = () => {
     setStep('upload');
     setSessionId('');
-    setUploadInfo(null);
+    setAccountId('');
     setImportResult(null);
   };
 
@@ -702,7 +534,7 @@ export default function Import() {
             账单导入
           </h1>
           <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-body)', marginTop: 'var(--spacing-xs)' }}>
-            导入支付宝、微信或银行账单，自动解析交易记录
+            导入支付宝、微信账单，自动清洗数据（剔除退款、内部转账）
           </p>
         </FadeIn>
 
@@ -740,48 +572,31 @@ export default function Import() {
           </FadeIn>
         )}
 
-        {/* 标签页切换 */}
-        <Tabs defaultValue="import" className="flex-1">
-          <TabsList className="mb-4">
-            <TabsTrigger value="import">导入账单</TabsTrigger>
-            <TabsTrigger value="history">
-              <History className="h-4 w-4 mr-2" />
-              导入历史
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="import">
-            <Card>
-              <CardContent className="p-6">
-                {step === 'upload' && (
-                  <StepUpload onUploaded={handleUploaded} />
-                )}
-                {step === 'preview' && sessionId && (
-                  <StepPreview
-                    sessionId={sessionId}
-                    onBack={handleBack}
-                    onConfirmed={handleConfirmed}
-                  />
-                )}
-                {step === 'complete' && importResult && (
-                  <StepComplete
-                    result={importResult}
-                    onDone={handleDone}
-                    onImportMore={handleImportMore}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="history">
-            <Card>
-              <CardContent className="p-6">
-                <ImportHistory />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* 内容卡片 */}
+        <FadeIn>
+          <Card>
+            <CardContent className="p-6">
+              {step === 'upload' && (
+                <StepUpload onUploaded={handleUploaded} />
+              )}
+              {step === 'preview' && sessionId && accountId && (
+                <StepPreview
+                  sessionId={sessionId}
+                  accountId={accountId}
+                  onBack={handleBack}
+                  onConfirmed={handleConfirmed}
+                />
+              )}
+              {step === 'complete' && importResult && (
+                <StepComplete
+                  result={importResult}
+                  onDone={handleDone}
+                  onImportMore={handleImportMore}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </FadeIn>
       </div>
     </MainLayout>
   );

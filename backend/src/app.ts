@@ -15,7 +15,6 @@ import { netWorthRouter } from './modules/net-worth'
 import { healthRouter } from './modules/health'
 import { loanRouter } from './modules/loan'
 import { recurringRouter } from './modules/recurring'
-import { automationRouter } from './modules/automation'
 import { aiChatRouter } from './modules/ai-chat'
 import { budgetRouter } from './modules/budget'
 import { providentFundRouter } from './modules/providentFund'
@@ -54,7 +53,6 @@ export const createApp = (): Application => {
   app.use(`${env.API_PREFIX}/health`, healthRouter)
   app.use(`${env.API_PREFIX}/loans`, loanRouter)
   app.use(`${env.API_PREFIX}/recurring`, recurringRouter)
-  app.use(`${env.API_PREFIX}/automation`, automationRouter)
   app.use(`${env.API_PREFIX}/ai-chat`, aiChatRouter)
 
   // Phase 3 routes

@@ -305,20 +305,6 @@ export interface RecurringBill {
   updatedAt: string;
 }
 
-// 自动化规则
-export interface AutomationRule {
-  id: string;
-  name: string;
-  triggerType: 'merchant' | 'category' | 'amount' | 'combination';
-  triggerConfig: Record<string, any>;
-  actionType: 'add_tag' | 'set_category' | 'send_notification' | 'mark_review';
-  actionConfig: Record<string, any>;
-  priority: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // ==================== 三期新增类型 ====================
 
 // 月度预算/预期收支
