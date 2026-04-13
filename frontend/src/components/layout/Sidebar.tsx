@@ -17,6 +17,8 @@ import {
   CalendarClock,
   Zap,
   Bot,
+  PiggyBank,
+  Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -28,6 +30,8 @@ const navItems = [
   { path: '/transactions', icon: Receipt, label: '交易流水' },
   { path: '/funds', icon: TrendingUp, label: '投资管理' },
   { path: '/loans', icon: Landmark, label: '贷款管理' },
+  { path: '/budgets', icon: PiggyBank, label: '月度预算' },
+  { path: '/provident-funds', icon: Building2, label: '公积金账户' },
   { path: '/recurring', icon: CalendarClock, label: '定期账单' },
   { path: '/automation', icon: Zap, label: '自动化规则' },
   { path: '/ai-chat', icon: Bot, label: 'AI助手' },

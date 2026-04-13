@@ -218,7 +218,7 @@ async function calculateInvestmentVolatility(): Promise<{ score: number; value: 
 
 // 生成综合健康报告
 async function generateHealthReport() {
-  const [savingsRate, emergencyFund, debtRatio, budgetExecution, investmentVolatility] = 
+  const [savingsRate, emergencyFund, debtRatio, budgetExecution, investmentVolatility] =
     await Promise.all([
       calculateSavingsRate(),
       calculateEmergencyFund(),
@@ -236,7 +236,7 @@ async function generateHealthReport() {
     investmentVolatility: 0.15,
   }
 
-  const totalScore = 
+  const totalScore =
     savingsRate.score * weights.savingsRate +
     emergencyFund.score * weights.emergencyFund +
     debtRatio.score * weights.debtRatio +
@@ -245,7 +245,7 @@ async function generateHealthReport() {
 
   // 生成建议
   const suggestions: string[] = []
-  
+
   if (savingsRate.score < 60) {
     suggestions.push('储蓄率偏低，建议控制非必要支出，目标储蓄率达到30%以上')
   }
@@ -265,6 +265,9 @@ async function generateHealthReport() {
     suggestions.push('财务状况良好，继续保持！')
   }
 
+  // 扩展分析数据
+  const analysisData = await generateAnalysisData()
+
   return {
     totalScore: Math.round(totalScore * 100) / 100,
     dimensionScores: {
@@ -275,6 +278,136 @@ async function generateHealthReport() {
       investmentVolatility: { ...investmentVolatility, weight: weights.investmentVolatility },
     },
     suggestions,
+    analysisData,
+  }
+}
+
+// 生成扩展分析数据
+async function generateAnalysisData() {
+  // 资产配置分析
+  const [accounts, funds, providentFunds, loans] = await Promise.all([
+    prisma.account.findMany({ where: { isArchived: false, isAsset: true } }),
+    prisma.fund.findMany(),
+    prisma.providentFund.findMany({ where: { includeNetWorth: true } }),
+    prisma.loan.findMany(),
+  ])
+
+  const totalAssets = accounts.reduce((sum, a) => sum + Number(a.balance), 0)
+  const totalFundValue = funds.reduce((sum, f) => sum + Number(f.currentValue), 0)
+  const totalPFValue = providentFunds.reduce((sum, f) => sum + Number(f.balance), 0)
+
+  // 按账户类型统计
+  const accountsByType: Record<string, number> = {}
+  for (const a of accounts) {
+    accountsByType[a.type] = (accountsByType[a.type] || 0) + Number(a.balance)
+  }
+
+  // 资产配置（各类资产占比）
+  const totalInvestableAssets = totalAssets + totalFundValue + totalPFValue
+  const assetAllocation = {
+    cash: { value: totalAssets, ratio: totalInvestableAssets > 0 ? (totalAssets / totalInvestableAssets) * 100 : 0 },
+    investment: { value: totalFundValue, ratio: totalInvestableAssets > 0 ? (totalFundValue / totalInvestableAssets) * 100 : 0 },
+    providentFund: { value: totalPFValue, ratio: totalInvestableAssets > 0 ? (totalPFValue / totalInvestableAssets) * 100 : 0 },
+    byAccountType: accountsByType,
+  }
+
+  // 借款健康分析
+  const incomingLoans = loans.filter(l => l.direction === 'INCOMING')
+  const outgoingLoans = loans.filter(l => l.direction === 'OUTGOING')
+  const overdueLoans = loans.filter(l => l.status === 'OVERDUE')
+
+  const totalReceivable = incomingLoans.reduce((sum, l) => sum + Number(l.remainingPrincipal), 0)
+  const totalPayable = outgoingLoans.reduce((sum, l) => sum + Number(l.remainingPrincipal), 0)
+
+  const loanHealth = {
+    receivableCount: incomingLoans.length,
+    payableCount: outgoingLoans.length,
+    overdueCount: overdueLoans.length,
+    totalReceivable,
+    totalPayable,
+    overdueList: overdueLoans.map(l => ({
+      name: l.name,
+      counterparty: l.counterparty,
+      amount: Number(l.remainingPrincipal),
+      dueDate: l.dueDate ? l.dueDate.toISOString().split('T')[0] : null,
+    })),
+  }
+
+  // 收支趋势（近6个月）
+  const monthlyTrend: Array<{ month: string; income: number; expense: number }> = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date()
+    d.setMonth(d.getMonth() - i)
+    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+
+    const [income, expense] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { type: 'INCOME', transactionDate: { gte: monthStart, lte: monthEnd } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { type: 'EXPENSE', transactionDate: { gte: monthStart, lte: monthEnd } },
+        _sum: { amount: true },
+      }),
+    ])
+
+    monthlyTrend.push({
+      month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      income: Number(income._sum.amount || 0),
+      expense: Number(expense._sum.amount || 0),
+    })
+  }
+
+  // 公积金汇总
+  const pfSummary = {
+    totalBalance: totalPFValue,
+    totalMonthlyContribution: providentFunds.reduce((sum, f) => sum + Number(f.monthlyContribution), 0),
+    accountCount: providentFunds.length,
+    byCity: providentFunds.reduce((acc, f) => {
+      acc[f.city] = (acc[f.city] || 0) + Number(f.balance)
+      return acc
+    }, {} as Record<string, number>),
+  }
+
+  // 预期收入达成率
+  const now = new Date()
+  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const currentBudget = await prisma.budget.findUnique({ where: { yearMonth: currentYearMonth } })
+
+  let incomeAchievementRate = null
+  let expenseAchievementRate = null
+  if (currentBudget) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+    const [actualIncome, actualExpense] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { type: 'INCOME', transactionDate: { gte: monthStart, lte: monthEnd } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { type: 'EXPENSE', transactionDate: { gte: monthStart, lte: monthEnd } },
+        _sum: { amount: true },
+      }),
+    ])
+
+    const expectedIncome = Number(currentBudget.expectedIncome)
+    const actualIncomeVal = Number(actualIncome._sum.amount || 0)
+    const expectedExpense = Number(currentBudget.expectedExpense)
+    const actualExpenseVal = Number(actualExpense._sum.amount || 0)
+
+    incomeAchievementRate = expectedIncome > 0 ? (actualIncomeVal / expectedIncome) * 100 : null
+    expenseAchievementRate = expectedExpense > 0 ? (actualExpenseVal / expectedExpense) * 100 : null
+  }
+
+  return {
+    assetAllocation,
+    loanHealth,
+    monthlyTrend,
+    providentFund: pfSummary,
+    incomeAchievementRate,
+    expenseAchievementRate,
   }
 }
 
@@ -298,6 +431,7 @@ healthRouter.post('/latest', async (_req: Request, res: Response) => {
         totalScore: Number(report.totalScore),
         dimensionScores: report.dimensionScores ? JSON.parse(report.dimensionScores) : null,
         suggestions: report.suggestions ? JSON.parse(report.suggestions) : null,
+        analysisData: report.analysisData ? JSON.parse(report.analysisData) : null,
       },
     })
   } else {
@@ -329,11 +463,13 @@ healthRouter.post('/generate', async (_req: Request, res: Response) => {
       totalScore: report.totalScore,
       dimensionScores: JSON.stringify(report.dimensionScores),
       suggestions: JSON.stringify(report.suggestions),
+      analysisData: JSON.stringify(report.analysisData),
     },
     update: {
       totalScore: report.totalScore,
       dimensionScores: JSON.stringify(report.dimensionScores),
       suggestions: JSON.stringify(report.suggestions),
+      analysisData: JSON.stringify(report.analysisData),
     },
   })
 
@@ -344,6 +480,7 @@ healthRouter.post('/generate', async (_req: Request, res: Response) => {
       totalScore: Number(savedReport.totalScore),
       dimensionScores: report.dimensionScores,
       suggestions: report.suggestions,
+      analysisData: report.analysisData,
     },
   })
 })

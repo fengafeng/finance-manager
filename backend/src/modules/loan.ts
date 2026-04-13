@@ -11,12 +11,12 @@ export const loanRouter: Router = Router()
 
 const createLoanSchema = z.object({
   name: z.string().min(1),
-  loanType: z.enum(['MORTGAGE', 'CAR_LOAN', 'CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY', 'OTHER']),
+  loanType: z.enum(['MORTGAGE', 'CAR_LOAN', 'CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY', 'PERSONAL_LOAN', 'OTHER']),
   principal: z.number().positive(),
   remainingPrincipal: z.number().positive(),
   annualRate: z.number().min(0).max(1),
   startDate: z.string(),
-  endDate: z.string(),
+  endDate: z.string().optional().nullable(),
   paymentDay: z.number().int().min(1).max(31).optional(),
   monthlyPayment: z.number().positive().optional(),
   linkedAccountId: z.string().uuid().optional().nullable(),
@@ -29,6 +29,13 @@ const createLoanSchema = z.object({
   paymentDueDate: z.number().int().min(1).max(31).optional(),
   unpostedBalance: z.number().optional(),
   installmentInfo: z.string().optional(),
+  // 借款扩展字段
+  direction: z.enum(['INCOMING', 'OUTGOING']).optional(),
+  counterparty: z.string().optional(),
+  loanDate: z.string().optional(),
+  dueDate: z.string().optional(),
+  status: z.enum(['PENDING', 'OVERDUE', 'SETTLED']).optional(),
+  remark: z.string().optional(),
 })
 
 const updateLoanSchema = z.object({
@@ -39,6 +46,13 @@ const updateLoanSchema = z.object({
   monthlyPayment: z.number().positive().optional(),
   linkedAccountId: z.string().uuid().optional().nullable(),
   autoTrackRepayment: z.boolean().optional(),
+  // 借款扩展字段
+  direction: z.enum(['INCOMING', 'OUTGOING']).optional().nullable(),
+  counterparty: z.string().optional().nullable(),
+  loanDate: z.string().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+  status: z.enum(['PENDING', 'OVERDUE', 'SETTLED']).optional(),
+  remark: z.string().optional().nullable(),
 })
 
 const prepaySimulateSchema = z.object({
@@ -159,6 +173,13 @@ loanRouter.post('/list', async (_req: Request, res: Response) => {
       availableCredit: l.availableCredit ? Number(l.availableCredit) : null,
       unpostedBalance: l.unpostedBalance ? Number(l.unpostedBalance) : null,
       progress: Number(l.principal) > 0 ? ((Number(l.principal) - Number(l.remainingPrincipal)) / Number(l.principal)) * 100 : 0,
+      // 借款扩展字段（确保始终返回值）
+      direction: l.direction ?? null,
+      counterparty: l.counterparty ?? null,
+      loanDate: l.loanDate ? l.loanDate.toISOString().split('T')[0] : null,
+      dueDate: l.dueDate ? l.dueDate.toISOString().split('T')[0] : null,
+      status: l.status ?? 'PENDING',
+      remark: l.remark ?? null,
     })),
   })
 })
@@ -169,14 +190,17 @@ loanRouter.post('/list', async (_req: Request, res: Response) => {
 loanRouter.post('/create', validate(createLoanSchema), async (req: Request, res: Response) => {
   const data = req.body
 
-  // 计算月供（如果未提供）
-  const startDate = new Date(data.startDate)
-  const endDate = new Date(data.endDate)
-  const months = Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 + 
-    (endDate.getMonth() - startDate.getMonth()))
-
-  const monthlyPayment = data.monthlyPayment || 
-    calculateMonthlyPayment(data.principal, data.annualRate, months)
+  // 计算月供（如果未提供，且有结束日期）
+  let monthlyPayment = data.monthlyPayment
+  if (!monthlyPayment && data.endDate && data.startDate) {
+    const startDate = new Date(data.startDate)
+    const endDate = new Date(data.endDate)
+    const months = Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 +
+      (endDate.getMonth() - startDate.getMonth()))
+    if (months > 0) {
+      monthlyPayment = calculateMonthlyPayment(data.principal, data.annualRate, months)
+    }
+  }
 
   const loan = await prisma.loan.create({
     data: {
@@ -185,8 +209,8 @@ loanRouter.post('/create', validate(createLoanSchema), async (req: Request, res:
       principal: data.principal,
       remainingPrincipal: data.remainingPrincipal || data.principal,
       annualRate: data.annualRate,
-      startDate: startDate,
-      endDate: endDate,
+      startDate: new Date(data.startDate),
+      endDate: data.endDate ? new Date(data.endDate) : null,
       paymentDay: data.paymentDay,
       monthlyPayment: monthlyPayment,
       linkedAccountId: data.linkedAccountId,
@@ -198,6 +222,13 @@ loanRouter.post('/create', validate(createLoanSchema), async (req: Request, res:
       paymentDueDate: data.paymentDueDate,
       unpostedBalance: data.unpostedBalance ?? 0,
       installmentInfo: data.installmentInfo,
+      // 借款扩展字段
+      direction: data.direction,
+      counterparty: data.counterparty,
+      loanDate: data.loanDate ? new Date(data.loanDate) : null,
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      status: data.status ?? 'PENDING',
+      remark: data.remark,
     },
     include: {
       linkedAccount: {
@@ -213,7 +244,7 @@ loanRouter.post('/create', validate(createLoanSchema), async (req: Request, res:
       principal: Number(loan.principal),
       remainingPrincipal: Number(loan.remainingPrincipal),
       annualRate: Number(loan.annualRate),
-      monthlyPayment: Number(loan.monthlyPayment),
+      monthlyPayment: loan.monthlyPayment ? Number(loan.monthlyPayment) : null,
     },
   })
 })
@@ -245,7 +276,13 @@ loanRouter.post('/get', async (req: Request, res: Response) => {
       principal: Number(loan.principal),
       remainingPrincipal: Number(loan.remainingPrincipal),
       annualRate: Number(loan.annualRate),
-      monthlyPayment: Number(loan.monthlyPayment),
+      monthlyPayment: loan.monthlyPayment ? Number(loan.monthlyPayment) : null,
+      direction: loan.direction ?? null,
+      counterparty: loan.counterparty ?? null,
+      loanDate: loan.loanDate ? loan.loanDate.toISOString().split('T')[0] : null,
+      dueDate: loan.dueDate ? loan.dueDate.toISOString().split('T')[0] : null,
+      status: loan.status ?? 'PENDING',
+      remark: loan.remark ?? null,
     },
   })
 })
@@ -256,9 +293,15 @@ loanRouter.post('/get', async (req: Request, res: Response) => {
 loanRouter.post('/update', validate(updateLoanSchema), async (req: Request, res: Response) => {
   const { id, ...data } = req.body
 
+  // 处理日期字段
+  const updateData: any = { ...data }
+  if (data.loanDate) updateData.loanDate = new Date(data.loanDate)
+  if (data.dueDate) updateData.dueDate = new Date(data.dueDate)
+  if (data.endDate) updateData.endDate = new Date(data.endDate)
+
   const loan = await prisma.loan.update({
     where: { id },
-    data,
+    data: updateData,
     include: {
       linkedAccount: {
         select: { id: true, name: true },
@@ -273,7 +316,13 @@ loanRouter.post('/update', validate(updateLoanSchema), async (req: Request, res:
       principal: Number(loan.principal),
       remainingPrincipal: Number(loan.remainingPrincipal),
       annualRate: Number(loan.annualRate),
-      monthlyPayment: Number(loan.monthlyPayment),
+      monthlyPayment: loan.monthlyPayment ? Number(loan.monthlyPayment) : null,
+      direction: loan.direction ?? null,
+      counterparty: loan.counterparty ?? null,
+      loanDate: loan.loanDate ? loan.loanDate.toISOString().split('T')[0] : null,
+      dueDate: loan.dueDate ? loan.dueDate.toISOString().split('T')[0] : null,
+      status: loan.status ?? 'PENDING',
+      remark: loan.remark ?? null,
     },
   })
 })
@@ -307,9 +356,9 @@ loanRouter.post('/payment-schedule', async (req: Request, res: Response) => {
   }
 
   const startDate = new Date(loan.startDate)
-  const endDate = new Date(loan.endDate)
-  const months = Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 + 
-    (endDate.getMonth() - startDate.getMonth()))
+  const endDate = loan.endDate ? new Date(loan.endDate) : null
+  const months = endDate ? Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 +
+    (endDate.getMonth() - startDate.getMonth())) : 0
 
   const schedule = calculatePaymentSchedule(
     Number(loan.remainingPrincipal),
@@ -352,9 +401,9 @@ loanRouter.post('/prepay-simulate', validate(prepaySimulateSchema), async (req: 
 
   // 计算剩余期数
   const startDate = new Date(loan.startDate)
-  const endDate = new Date(loan.endDate)
-  const totalMonths = Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 + 
-    (endDate.getMonth() - startDate.getMonth()))
+  const endDate = loan.endDate ? new Date(loan.endDate) : null
+  const totalMonths = endDate ? Math.ceil((endDate.getFullYear() - startDate.getFullYear()) * 12 +
+    (endDate.getMonth() - startDate.getMonth())) : 0
 
   // 简化：假设已还款期数为总期数的一定比例
   const paidMonths = Math.floor(totalMonths * (1 - Number(loan.remainingPrincipal) / Number(loan.principal)))

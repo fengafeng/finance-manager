@@ -201,7 +201,13 @@ export interface HealthReport {
 }
 
 // 贷款类型
-export type LoanType = 'MORTGAGE' | 'CAR_LOAN' | 'CREDIT_CARD' | 'HUABEI' | 'BAITIAO' | 'DOUYIN_PAY' | 'OTHER';
+export type LoanType = 'MORTGAGE' | 'CAR_LOAN' | 'CREDIT_CARD' | 'HUABEI' | 'BAITIAO' | 'DOUYIN_PAY' | 'PERSONAL_LOAN' | 'OTHER';
+
+// 借款方向
+export type LoanDirection = 'INCOMING' | 'OUTGOING';
+
+// 借款状态
+export type LoanStatus = 'PENDING' | 'OVERDUE' | 'SETTLED';
 
 // 贷款
 export interface Loan {
@@ -212,7 +218,7 @@ export interface Loan {
   remainingPrincipal: number;
   annualRate: number;
   startDate: string;
-  endDate: string;
+  endDate: string | null;
   paymentDay: number | null;
   monthlyPayment: number | null;
   linkedAccountId: string | null;
@@ -236,6 +242,13 @@ export interface Loan {
   paymentDueDate?: number | null;
   unpostedBalance?: number | null;
   installmentInfo?: string | null;
+  // 借款扩展字段
+  direction?: LoanDirection | null;
+  counterparty?: string | null;
+  loanDate?: string | null;
+  dueDate?: string | null;
+  status?: LoanStatus | null;
+  remark?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -301,4 +314,88 @@ export interface AutomationRule {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==================== 三期新增类型 ====================
+
+// 月度预算/预期收支
+export interface Budget {
+  yearMonth: string;
+  expectedIncome: number;
+  expectedExpense: number;
+  actualIncome: number | null;
+  actualExpense: number | null;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 公积金账户
+export interface ProvidentFund {
+  id: string;
+  name: string;
+  city: string;
+  accountNumber: string | null;
+  balance: number;
+  monthlyContribution: number;
+  personalContribution: number | null;
+  employerContribution: number | null;
+  interestRate: number | null;
+  accountStatus: string;
+  includeNetWorth: boolean;
+  remark: string | null;
+  lastUpdated: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 公积金汇总
+export interface ProvidentFundSummary {
+  totalBalance: number;
+  totalMonthlyContribution: number;
+  accountCount: number;
+  byCity: Record<string, number>;
+}
+
+// 健康报告扩展分析数据
+export interface HealthAnalysisData {
+  assetAllocation: {
+    cash: { value: number; ratio: number };
+    investment: { value: number; ratio: number };
+    providentFund: { value: number; ratio: number };
+    byAccountType: Record<string, number>;
+  };
+  loanHealth: {
+    receivableCount: number;
+    payableCount: number;
+    overdueCount: number;
+    totalReceivable: number;
+    totalPayable: number;
+    overdueList: Array<{
+      name: string;
+      counterparty: string | null;
+      amount: number;
+      dueDate: string | null;
+    }>;
+  };
+  monthlyTrend: Array<{ month: string; income: number; expense: number }>;
+  providentFund: {
+    totalBalance: number;
+    totalMonthlyContribution: number;
+    accountCount: number;
+    byCity: Record<string, number>;
+  };
+  incomeAchievementRate: number | null;
+  expenseAchievementRate: number | null;
+}
+
+// 扩展健康报告
+export interface HealthReportExtended {
+  id: string;
+  reportDate: string;
+  totalScore: number;
+  dimensionScores: any;
+  suggestions: string[];
+  analysisData: HealthAnalysisData | null;
+  createdAt: string;
 }

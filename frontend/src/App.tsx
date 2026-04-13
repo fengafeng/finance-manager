@@ -16,6 +16,8 @@ import Loans from "./pages/Loans";
 import Recurring from "./pages/Recurring";
 import Automation from "./pages/Automation";
 import AIChat from "./pages/AIChat";
+import Budgets from "./pages/Budgets";
+import ProvidentFunds from "./pages/ProvidentFunds";
 import NotFound from "./pages/NotFound";
 
 /**
@@ -57,6 +59,8 @@ function App() {
             <Route path="/net-worth" data-genie-title="资产全景" data-genie-key="NetWorth" element={<PageTransition transition="slide-up"><NetWorth /></PageTransition>} />
             <Route path="/health" data-genie-title="财务健康" data-genie-key="Health" element={<PageTransition transition="slide-up"><Health /></PageTransition>} />
             <Route path="/loans" data-genie-title="贷款管理" data-genie-key="Loans" element={<PageTransition transition="slide-up"><Loans /></PageTransition>} />
+            <Route path="/budgets" data-genie-title="月度预算" data-genie-key="Budgets" element={<PageTransition transition="slide-up"><Budgets /></PageTransition>} />
+            <Route path="/provident-funds" data-genie-title="公积金账户" data-genie-key="ProvidentFunds" element={<PageTransition transition="slide-up"><ProvidentFunds /></PageTransition>} />
             <Route path="/recurring" data-genie-title="定期账单" data-genie-key="Recurring" element={<PageTransition transition="slide-up"><Recurring /></PageTransition>} />
             <Route path="/automation" data-genie-title="自动化规则" data-genie-key="Automation" element={<PageTransition transition="slide-up"><Automation /></PageTransition>} />
             <Route path="/ai-chat" data-genie-title="AI助手" data-genie-key="AIChat" element={<PageTransition transition="slide-up"><AIChat /></PageTransition>} />

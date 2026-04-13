@@ -259,7 +259,21 @@ enum LoanType {
   HUABEI     // 花呗
   BAITIAO    // 白条
   DOUYIN_PAY // 抖音月付
+  PERSONAL_LOAN // 个人借款
   OTHER      // 其他
+}
+
+// 借款方向枚举
+enum LoanDirection {
+  INCOMING  // 我借出（别人欠我）- 资产
+  OUTGOING  // 我借入（我欠别人）- 负债
+}
+
+// 借款/应收状态枚举
+enum LoanStatus {
+  PENDING   // 待还
+  OVERDUE   // 逾期
+  SETTLED   // 已结清
 }
 
 // 净资产快照模型
@@ -323,7 +337,7 @@ model Loan {
   remainingPrincipal  Decimal  @db.Decimal(15, 2) // 剩余本金/已用额度
   annualRate          Decimal  @db.Decimal(5, 4) // 年化利率
   startDate           DateTime @db.Date // 开始日期
-  endDate             DateTime @db.Date // 结束日期（信用卡则为空）
+  endDate             DateTime? @db.Date // 结束日期（信用卡则为空）
   paymentDay          Int?     // 每月还款日
   monthlyPayment      Decimal? @db.Decimal(15, 2) // 月供金额
   linkedAccountId     String?  // 关联还款账户
@@ -336,6 +350,13 @@ model Loan {
   paymentDueDate     Int?     // 还款日（1-31）
   unpostedBalance    Decimal? @db.Decimal(15, 2) // 未出账金额
   installmentInfo    String?  // JSON: 分期信息
+  // 借款扩展字段（个人借款/应收应付）
+  direction           LoanDirection?  // 借款方向（INCOMING/OUTGOING），null表示传统贷款
+  counterparty        String?         // 对方姓名
+  loanDate            DateTime? @db.Date // 借款日期
+  dueDate             DateTime? @db.Date // 应还日期
+  status              LoanStatus @default(PENDING) // 状态
+  remark              String?         // 备注
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -380,8 +401,48 @@ model HealthReport {
   totalScore      Decimal? @db.Decimal(5, 2) // 综合得分
   dimensionScores String?  // JSON: 各维度得分
   suggestions     String?  // AI生成的改进建议
+  // 扩展分析数据
+  analysisData   String?  // JSON: 资产配置/收支趋势/借款健康等详细分析
   createdAt       DateTime @default(now())
 
   @@unique([reportDate])
   @@map("health_reports")
+}
+
+// 月度预算/预期收支模型
+model Budget {
+  id               String   @id @default(uuid())
+  yearMonth        String   // 年月，格式 "2026-04"
+  expectedIncome   Decimal  @default(0) @db.Decimal(15, 2) // 预期收入
+  expectedExpense  Decimal  @default(0) @db.Decimal(15, 2) // 预期支出
+  actualIncome     Decimal? @db.Decimal(15, 2) // 实际收入（月末填入）
+  actualExpense    Decimal? @db.Decimal(15, 2) // 实际支出（月末填入）
+  remark           String?  // 备注
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([yearMonth])
+  @@index([yearMonth])
+  @@map("budgets")
+}
+
+// 公积金账户模型
+model ProvidentFund {
+  id                    String   @id @default(uuid())
+  name                  String   // 账户名称/别名
+  city                  String   // 缴存城市
+  accountNumber         String?  // 公积金账号
+  balance               Decimal  @default(0) @db.Decimal(15, 2) // 当前余额
+  monthlyContribution   Decimal  @default(0) @db.Decimal(10, 2) // 月缴存总额（个人+单位）
+  personalContribution  Decimal? @db.Decimal(10, 2) // 个人月缴存
+  employerContribution  Decimal? @db.Decimal(10, 2) // 单位月缴存
+  interestRate          Decimal? @db.Decimal(5, 4) // 年利率
+  accountStatus         String   @default("ACTIVE") // 账户状态：ACTIVE/CLOSED/SUSPENDED
+  lastUpdated           DateTime @default(now()) // 最近更新日期
+  remark                String?  // 备注
+  includeNetWorth       Boolean  @default(true) // 是否纳入净资产
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("provident_funds")
 }

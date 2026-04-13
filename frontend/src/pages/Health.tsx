@@ -16,6 +16,12 @@ import {
   CreditCard,
   Target,
   BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Landmark,
+  Users,
+  Wallet,
+  AlertCircle,
 } from 'lucide-react';
 
 function getScoreColor(score: number): string {
@@ -286,6 +292,172 @@ export default function Health() {
                   );
                 })}
             </Stagger>
+
+            {/* 扩展分析数据 */}
+            {report.analysisData && (
+              <>
+                <FadeIn>
+                  <h2 className="font-semibold" style={{ fontSize: 'var(--font-size-title)' }}>综合分析</h2>
+                </FadeIn>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 收支趋势 */}
+                  <FadeIn>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5" /> 收支趋势（近6月）
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {report.analysisData.monthlyTrend?.map((m: any) => (
+                            <div key={m.month} className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground w-16">{m.month}</span>
+                              <div className="flex items-center gap-2 flex-1 justify-end">
+                                <TrendingUp className="h-3 w-3 text-success" />
+                                <span className="text-success w-20 text-right">{m.income.toLocaleString()}</span>
+                                <TrendingDown className="h-3 w-3 text-destructive" />
+                                <span className="text-destructive w-20 text-right">{m.expense.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* 预期收入达成率 */}
+                        {report.analysisData.incomeAchievementRate !== null && (
+                          <div className="mt-4 pt-3 border-t">
+                            <p className="text-sm text-muted-foreground mb-1">当月收入达成率</p>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${report.analysisData.incomeAchievementRate >= 100 ? 'bg-success' : 'bg-warning'}`}
+                                  style={{ width: `${Math.min(100, report.analysisData.incomeAchievementRate)}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium w-12 text-right">{report.analysisData.incomeAchievementRate.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+
+                  {/* 资产配置 */}
+                  <FadeIn>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5" /> 资产配置
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {[
+                            { key: 'cash', label: '现金/存款', icon: Wallet, color: 'bg-blue-500' },
+                            { key: 'investment', label: '投资资产', icon: TrendingUp, color: 'bg-purple-500' },
+                            { key: 'providentFund', label: '公积金', icon: Landmark, color: 'bg-green-500' },
+                          ].map(({ key, label, icon: Icon, color }) => {
+                            const asset = report.analysisData.assetAllocation?.[key];
+                            if (!asset) return null;
+                            return (
+                              <div key={key} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-2 h-2 rounded-full ${color}`} />
+                                  <span className="text-sm">{label}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-semibold text-sm">{asset.value?.toLocaleString()}</span>
+                                  <span className="text-muted-foreground text-xs ml-1">({asset.ratio?.toFixed(1)}%)</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+
+                  {/* 借款健康 */}
+                  <FadeIn>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Users className="h-5 w-5" /> 借款健康
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                          <div className="p-3 bg-green-50 rounded-lg">
+                            <p className="text-xs text-muted-foreground">借出（应收）</p>
+                            <p className="font-bold text-success">{report.analysisData.loanHealth?.totalReceivable?.toLocaleString() || 0}</p>
+                            <p className="text-xs text-muted-foreground">{report.analysisData.loanHealth?.receivableCount || 0} 笔</p>
+                          </div>
+                          <div className="p-3 bg-red-50 rounded-lg">
+                            <p className="text-xs text-muted-foreground">借入（应付）</p>
+                            <p className="font-bold text-destructive">{report.analysisData.loanHealth?.totalPayable?.toLocaleString() || 0}</p>
+                            <p className="text-xs text-muted-foreground">{report.analysisData.loanHealth?.payableCount || 0} 笔</p>
+                          </div>
+                        </div>
+                        {report.analysisData.loanHealth?.overdueCount > 0 && (
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <div className="flex items-center gap-1 mb-2">
+                              <AlertCircle className="h-4 w-4 text-red-500" />
+                              <span className="font-medium text-sm text-red-700">逾期提醒（{report.analysisData.loanHealth.overdueCount}笔）</span>
+                            </div>
+                            {report.analysisData.loanHealth.overdueList?.map((item: any, i: number) => (
+                              <div key={i} className="text-sm flex justify-between py-1">
+                                <span className="text-muted-foreground">{item.name}{item.counterparty ? `（${item.counterparty}）` : ''}</span>
+                                <span className="font-medium text-destructive">¥{item.amount?.toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(!report.analysisData.loanHealth?.receivableCount && !report.analysisData.loanHealth?.payableCount) && (
+                          <p className="text-sm text-muted-foreground text-center py-4">暂无借款记录</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+
+                  {/* 公积金 */}
+                  <FadeIn>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Landmark className="h-5 w-5" /> 公积金
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {report.analysisData.providentFund?.accountCount > 0 ? (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="p-3 bg-primary/5 rounded-lg">
+                                <p className="text-xs text-muted-foreground">总余额</p>
+                                <p className="font-bold">¥{report.analysisData.providentFund.totalBalance?.toLocaleString()}</p>
+                              </div>
+                              <div className="p-3 bg-primary/5 rounded-lg">
+                                <p className="text-xs text-muted-foreground">月缴存</p>
+                                <p className="font-bold">¥{report.analysisData.providentFund.totalMonthlyContribution?.toLocaleString()}</p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">按城市分布</p>
+                              {Object.entries(report.analysisData.providentFund.byCity || {}).map(([city, balance]) => (
+                                <div key={city} className="flex justify-between text-sm py-1 border-b border-border/50 last:border-0">
+                                  <span>{city}</span>
+                                  <span className="font-medium">¥{Number(balance).toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-4">暂无公积金账户</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <FadeIn>

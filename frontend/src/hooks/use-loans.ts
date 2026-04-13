@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { Loan, PrepaySimulation, PaymentScheduleItem, LoanType } from '@/types';
+import type { Loan, PrepaySimulation, PaymentScheduleItem, LoanType, LoanDirection, LoanStatus } from '@/types';
 
 interface CreateLoanData {
   name: string;
@@ -9,11 +9,18 @@ interface CreateLoanData {
   remainingPrincipal?: number;
   annualRate: number;
   startDate: string;
-  endDate: string;
+  endDate?: string | null;
   paymentDay?: number;
   monthlyPayment?: number;
   linkedAccountId?: string;
   autoTrackRepayment?: boolean;
+  // 借款扩展
+  direction?: LoanDirection;
+  counterparty?: string;
+  loanDate?: string;
+  dueDate?: string;
+  status?: LoanStatus;
+  remark?: string;
 }
 
 interface UpdateLoanData {
@@ -24,6 +31,13 @@ interface UpdateLoanData {
   monthlyPayment?: number;
   linkedAccountId?: string | null;
   autoTrackRepayment?: boolean;
+  // 借款扩展
+  direction?: LoanDirection | null;
+  counterparty?: string | null;
+  loanDate?: string | null;
+  dueDate?: string | null;
+  status?: LoanStatus;
+  remark?: string | null;
 }
 
 // 获取贷款列表
