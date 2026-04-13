@@ -30,6 +30,9 @@ const createAccountSchema = z.object({
   paymentDueDate: z.number().int().min(1).max(31).optional(),
   unpostedBalance: z.number().optional(),
   installmentInfo: z.string().optional(),
+  // 支付宝/微信扩展字段
+  thirdPartyAccount: z.string().optional().nullable(),
+  thirdPartyNickname: z.string().optional().nullable(),
 })
 
 const updateAccountSchema = z.object({
@@ -50,6 +53,9 @@ const updateAccountSchema = z.object({
   paymentDueDate: z.number().int().min(1).max(31).optional().nullable(),
   unpostedBalance: z.number().optional(),
   installmentInfo: z.string().optional(),
+  // 支付宝/微信扩展字段
+  thirdPartyAccount: z.string().optional().nullable(),
+  thirdPartyNickname: z.string().optional().nullable(),
 })
 
 const listAccountsSchema = z.object({
@@ -238,6 +244,9 @@ accountRouter.post('/create', validate(createAccountSchema), async (req: Request
       paymentDueDate: data.paymentDueDate,
       unpostedBalance: data.unpostedBalance ?? 0,
       installmentInfo: data.installmentInfo,
+      // 支付宝/微信扩展字段
+      thirdPartyAccount: data.thirdPartyAccount,
+      thirdPartyNickname: data.thirdPartyNickname,
     },
   })
 

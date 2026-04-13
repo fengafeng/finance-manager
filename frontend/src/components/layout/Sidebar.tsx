@@ -19,6 +19,8 @@ import {
   Bot,
   PiggyBank,
   Building2,
+  Upload,
+  Settings2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -28,6 +30,8 @@ const navItems = [
   { path: '/health', icon: Heart, label: '财务健康' },
   { path: '/accounts', icon: Wallet, label: '账户管理' },
   { path: '/transactions', icon: Receipt, label: '交易流水' },
+  { path: '/import', icon: Upload, label: '账单导入' },
+  { path: '/import-config', icon: Settings2, label: '导入配置' },
   { path: '/funds', icon: TrendingUp, label: '投资管理' },
   { path: '/loans', icon: Landmark, label: '贷款管理' },
   { path: '/budgets', icon: PiggyBank, label: '月度预算' },

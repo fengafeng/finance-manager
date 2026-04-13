@@ -19,6 +19,8 @@ import { automationRouter } from './modules/automation'
 import { aiChatRouter } from './modules/ai-chat'
 import { budgetRouter } from './modules/budget'
 import { providentFundRouter } from './modules/providentFund'
+import { importRouter } from './modules/import'
+import { importConfigRouter } from './modules/import-config'
 
 export const createApp = (): Application => {
   const app = express()
@@ -59,6 +61,10 @@ export const createApp = (): Application => {
   // Phase 3 routes
   app.use(`${env.API_PREFIX}/budgets`, budgetRouter)
   app.use(`${env.API_PREFIX}/provident-funds`, providentFundRouter)
+
+  // Import routes
+  app.use(`${env.API_PREFIX}/import`, importRouter)
+  app.use(`${env.API_PREFIX}/import-config`, importConfigRouter)
 
   // Error handling
   app.use(errorHandler)

@@ -25,6 +25,9 @@ export interface Account {
   unpostedBalance?: number | null;
   installmentInfo?: string | null;
   linkedLoanId?: string | null;
+  // 支付宝/微信扩展字段
+  thirdPartyAccount?: string | null;
+  thirdPartyNickname?: string | null;
 }
 
 export interface AccountSummary {
@@ -398,4 +401,70 @@ export interface HealthReportExtended {
   suggestions: string[];
   analysisData: HealthAnalysisData | null;
   createdAt: string;
+}
+
+// ==================== 四期新增：导入配置 ====================
+
+// 导入配置来源类型
+export type ImportConfigSourceType = 'IMPORT_ALIPAY' | 'IMPORT_WECHAT' | 'IMPORT_BANK';
+
+// 导入配置
+export interface ImportConfig {
+  id: string;
+  name: string;
+  sourceType: ImportConfigSourceType;
+  linkedAccountId: string | null;
+  thirdPartyAccount: string | null;
+  nickname: string | null;
+  defaultCategory: string | null;
+  autoTag: boolean;
+  skipInternal: boolean;
+  mergeSimilar: boolean;
+  isActive: boolean;
+  lastImportAt: string | null;
+  lastImportCount: number | null;
+  remark: string | null;
+  linkedAccount?: {
+    id: string;
+    name: string;
+    type: AccountType;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 导入配置摘要
+export interface ImportConfigSummary {
+  alipay: {
+    configCount: number;
+    lastImportAt: string | null;
+  };
+  wechat: {
+    configCount: number;
+    lastImportAt: string | null;
+  };
+  bank: {
+    configCount: number;
+    lastImportAt: string | null;
+  };
+}
+
+// 其他可导入的信息类型
+export type ImportableInfoType =
+  | 'ALIPAY_BILL_SUMMARY'      // 支付宝年度账单汇总
+  | 'ALIPAY_MONTHLY_STATS'     // 支付宝月度统计
+  | 'ALIPAY_MERCHANT_STATS'     // 支付宝商家消费分析
+  | 'WECHAT_YEAR_SUMMARY'      // 微信年度账单
+  | 'WECHAT_MONTHLY_STATS'     // 微信月度统计
+  | 'WECHAT_MERCHANT_STATS'    // 微信商家消费分析
+  | 'BANK_STATEMENT'            // 银行对账单
+  | 'CREDIT_CARD_BILL';        // 信用卡账单
+
+// 可导入信息项目
+export interface ImportableInfoItem {
+  type: ImportableInfoType;
+  label: string;
+  description: string;
+  supportedFormats: string[];
+  example: string;
 }

@@ -43,6 +43,9 @@ const CREDIT_ACCOUNT_TYPES: AccountType[] = ['CREDIT_CARD', 'HUABEI', 'BAITIAO',
 // 需要卡号的账户类型
 const CARD_ACCOUNT_TYPES: AccountType[] = ['BANK', 'CREDIT_CARD'];
 
+// 支付宝/微信账户类型
+const THIRD_PARTY_ACCOUNT_TYPES: AccountType[] = ['ALIPAY', 'WECHAT'];
+
 const accountTypeLabels: Record<AccountType, string> = {
   ALIPAY: '支付宝',
   WECHAT: '微信',
@@ -81,6 +84,11 @@ function needsCardNumber(type: AccountType): boolean {
   return CARD_ACCOUNT_TYPES.includes(type);
 }
 
+// 判断是否为第三方支付账户（支付宝/微信）
+function isThirdPartyAccount(type: AccountType): boolean {
+  return THIRD_PARTY_ACCOUNT_TYPES.includes(type);
+}
+
 // 账户表单组件
 function AccountForm({
   account,
@@ -102,6 +110,9 @@ function AccountForm({
   const [paymentDueDate, setPaymentDueDate] = useState(account?.paymentDueDate?.toString() || '');
   const [unpostedBalance, setUnpostedBalance] = useState(account?.unpostedBalance?.toString() || '0');
   const [cardNumber, setCardNumber] = useState(account?.cardNumber || '');
+  // 第三方账号字段（支付宝/微信）
+  const [thirdPartyAccount, setThirdPartyAccount] = useState(account?.thirdPartyAccount || '');
+  const [thirdPartyNickname, setThirdPartyNickname] = useState(account?.thirdPartyNickname || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,10 +127,13 @@ function AccountForm({
       billingDate: billingDate ? parseInt(billingDate) : undefined,
       paymentDueDate: paymentDueDate ? parseInt(paymentDueDate) : undefined,
       unpostedBalance: unpostedBalance ? parseFloat(unpostedBalance) : 0,
+      thirdPartyAccount: isThirdPartyAccount(type) ? thirdPartyAccount : undefined,
+      thirdPartyNickname: isThirdPartyAccount(type) ? thirdPartyNickname : undefined,
     });
   };
 
   const showCreditFields = isCreditAccount(type);
+  const showThirdPartyFields = isThirdPartyAccount(type);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -230,6 +244,41 @@ function AccountForm({
               value={unpostedBalance}
               onChange={(e) => setUnpostedBalance(e.target.value)}
               placeholder="已消费但未出账的金额"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 支付宝/微信扩展字段 */}
+      {showThirdPartyFields && (
+        <div className="p-4 bg-muted/50 rounded-lg space-y-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Smartphone className="h-4 w-4" />
+            {type === 'ALIPAY' ? '支付宝' : '微信支付'} 账户设置
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="thirdPartyAccount">
+              {type === 'ALIPAY' ? '支付宝账号' : '微信OpenID'}
+            </Label>
+            <Input
+              id="thirdPartyAccount"
+              value={thirdPartyAccount}
+              onChange={(e) => setThirdPartyAccount(e.target.value)}
+              placeholder={type === 'ALIPAY' ? '手机号/邮箱/昵称' : '微信OpenID（用于关联导入）'}
+            />
+            <p className="text-xs text-muted-foreground">
+              {type === 'ALIPAY'
+                ? '用于在导入账单时匹配您的账户'
+                : '可在微信「支付优惠」页面查看您的OpenID'}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="thirdPartyNickname">昵称/备注</Label>
+            <Input
+              id="thirdPartyNickname"
+              value={thirdPartyNickname}
+              onChange={(e) => setThirdPartyNickname(e.target.value)}
+              placeholder="可选，用于在导入配置中识别此账户"
             />
           </div>
         </div>
