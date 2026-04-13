@@ -41,12 +41,56 @@ function formatMoney(amount: number) {
   return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// 主要城市列表
 const majorCities = [
   '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '武汉', '西安',
   '重庆', '天津', '长沙', '郑州', '东莞', '佛山', '青岛', '济南', '大连', '沈阳',
   '厦门', '福州', '合肥', '昆明', '哈尔滨', '长春', '石家庄', '南昌', '贵阳', '南宁',
   '海口', '太原', '兰州', '银川', '西宁', '乌鲁木齐', '呼和浩特', '拉萨', '其他',
 ];
+
+// 城市公积金年利率映射（2024年基准利率）
+const cityInterestRates: Record<string, number> = {
+  '北京': 1.5,
+  '上海': 1.5,
+  '广州': 1.5,
+  '深圳': 1.5,
+  '杭州': 1.5,
+  '南京': 1.5,
+  '苏州': 1.5,
+  '成都': 1.5,
+  '武汉': 1.5,
+  '西安': 1.5,
+  '重庆': 1.5,
+  '天津': 1.5,
+  '长沙': 1.5,
+  '郑州': 1.5,
+  '东莞': 1.5,
+  '佛山': 1.5,
+  '青岛': 1.5,
+  '济南': 1.5,
+  '大连': 1.5,
+  '沈阳': 1.5,
+  '厦门': 1.5,
+  '福州': 1.5,
+  '合肥': 1.5,
+  '昆明': 1.5,
+  '哈尔滨': 1.5,
+  '长春': 1.5,
+  '石家庄': 1.5,
+  '南昌': 1.5,
+  '贵阳': 1.5,
+  '南宁': 1.5,
+  '海口': 1.5,
+  '太原': 1.5,
+  '兰州': 1.5,
+  '银川': 1.5,
+  '西宁': 1.5,
+  '乌鲁木齐': 1.5,
+  '呼和浩特': 1.5,
+  '拉萨': 1.5,
+  '其他': 1.5,
+};
 
 function PFForm({
   pf,
@@ -62,10 +106,17 @@ function PFForm({
   const [accountNumber, setAccountNumber] = useState(pf?.accountNumber || '');
   const [balance, setBalance] = useState(pf?.balance?.toString() || '');
   const [monthlyContribution, setMonthlyContribution] = useState(pf?.monthlyContribution?.toString() || '');
-  const [personalContribution, setPersonalContribution] = useState(pf?.personalContribution?.toString() || '');
-  const [employerContribution, setEmployerContribution] = useState(pf?.employerContribution?.toString() || '');
   const [interestRate, setInterestRate] = useState(pf?.interestRate ? (pf.interestRate * 100).toString() : '');
   const [remark, setRemark] = useState(pf?.remark || '');
+
+  // 当城市变化时，自动填充年利率
+  const handleCityChange = (newCity: string) => {
+    setCity(newCity);
+    // 只有在用户没有手动修改过年利率时才自动填充
+    if (!interestRate || interestRate === '' || pf?.interestRate === undefined) {
+      setInterestRate(cityInterestRates[newCity]?.toString() || '1.5');
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,8 +126,9 @@ function PFForm({
       accountNumber: accountNumber || undefined,
       balance: parseFloat(balance) || 0,
       monthlyContribution: parseFloat(monthlyContribution) || 0,
-      personalContribution: personalContribution ? parseFloat(personalContribution) : undefined,
-      employerContribution: employerContribution ? parseFloat(employerContribution) : undefined,
+      // 双边缴存 = 个人 + 单位，自动计算（如果只填总额，则各占50%）
+      personalContribution: monthlyContribution ? parseFloat(monthlyContribution) / 2 : undefined,
+      employerContribution: monthlyContribution ? parseFloat(monthlyContribution) / 2 : undefined,
       interestRate: interestRate ? parseFloat(interestRate) / 100 : undefined,
       remark: remark || undefined,
     });
@@ -91,7 +143,7 @@ function PFForm({
         </div>
         <div className="space-y-2">
           <Label>缴存城市</Label>
-          <Select value={city} onValueChange={setCity}>
+          <Select value={city} onValueChange={handleCityChange}>
             <SelectTrigger><SelectValue placeholder="选择城市" /></SelectTrigger>
             <SelectContent>
               {majorCities.map(c => (
@@ -111,27 +163,32 @@ function PFForm({
           <Input type="number" step="0.01" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0.00" required />
         </div>
         <div className="space-y-2">
-          <Label>月缴存总额</Label>
-          <Input type="number" step="0.01" value={monthlyContribution} onChange={(e) => setMonthlyContribution(e.target.value)} placeholder="个人+单位合计" />
+          <Label>双边月缴存(元)</Label>
+          <Input type="number" step="0.01" value={monthlyContribution} onChange={(e) => setMonthlyContribution(e.target.value)} placeholder="个人+单位合计金额" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>个人月缴</Label>
-          <Input type="number" step="0.01" value={personalContribution} onChange={(e) => setPersonalContribution(e.target.value)} placeholder="个人部分" />
+          <Label>年利率(%)</Label>
+          <div className="relative">
+            <Input 
+              type="number" 
+              step="0.01" 
+              value={interestRate} 
+              onChange={(e) => setInterestRate(e.target.value)} 
+              placeholder="1.5"
+            />
+            {city && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                {cityInterestRates[city] || 1.5}% 基准
+              </span>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
-          <Label>单位月缴</Label>
-          <Input type="number" step="0.01" value={employerContribution} onChange={(e) => setEmployerContribution(e.target.value)} placeholder="单位部分" />
+          <Label>备注</Label>
+          <Input value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="备注信息" />
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label>年利率(%)</Label>
-        <Input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} placeholder="如 1.5" />
-      </div>
-      <div className="space-y-2">
-        <Label>备注</Label>
-        <Input value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="备注信息" />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>取消</Button>

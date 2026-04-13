@@ -126,14 +126,23 @@ function StepUpload({
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !accountId) return;
+    if (!selectedFile) {
+      alert('请选择要上传的账单文件');
+      return;
+    }
+    if (!accountId) {
+      alert('请先选择要导入到的账户');
+      return;
+    }
     try {
       const result = await uploadMutation.mutateAsync({
         file: selectedFile,
         sourceType,
         accountId,
       });
-      onUploaded(result.sessionId, result);
+      // API 返回格式: { success: true, data: { sessionId, ... } }
+      const sessionId = result.data?.sessionId || result.sessionId;
+      onUploaded(sessionId, result);
     } catch (err) {
       // 错误由 mutation 处理
     }

@@ -475,15 +475,22 @@ router.post('/natural-create', async (req, res) => {
         break;
       }
       case 'fund': {
+        // 自动计算收益和收益率
+        const cost = data.cost || data.currentValue || 0;
+        const currentValue = data.currentValue || 0;
+        const profit = currentValue - cost;
+        const profitRate = cost > 0 ? (profit / cost) * 100 : 0;
+
         result = await prisma.fund.create({
           data: {
             name: data.name,
-            code: data.code || '',
-            type: data.type || 'OTHER',
+            code: data.code || data.name || '',
+            type: data.type || 'MIXED',
             platform: data.platform || 'OTHER',
-            shares: data.shares || 0,
-            costPerShare: data.costPerShare || 0,
-            currentValue: data.currentValue || 0,
+            cost: cost,
+            currentValue: currentValue,
+            profit: profit,
+            profitRate: profitRate,
             purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : null,
           },
         });
