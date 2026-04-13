@@ -11,7 +11,7 @@ export const loanRouter: Router = Router()
 
 const createLoanSchema = z.object({
   name: z.string().min(1),
-  loanType: z.enum(['MORTGAGE', 'CAR_LOAN', 'CREDIT_CARD', 'OTHER']),
+  loanType: z.enum(['MORTGAGE', 'CAR_LOAN', 'CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY', 'OTHER']),
   principal: z.number().positive(),
   remainingPrincipal: z.number().positive(),
   annualRate: z.number().min(0).max(1),
@@ -20,7 +20,15 @@ const createLoanSchema = z.object({
   paymentDay: z.number().int().min(1).max(31).optional(),
   monthlyPayment: z.number().positive().optional(),
   linkedAccountId: z.string().uuid().optional().nullable(),
+  linkedCreditAccountId: z.string().uuid().optional().nullable(),
   autoTrackRepayment: z.boolean().optional().default(true),
+  // 信用账户特有字段
+  creditLimit: z.number().optional(),
+  availableCredit: z.number().optional(),
+  billingDate: z.number().int().min(1).max(31).optional(),
+  paymentDueDate: z.number().int().min(1).max(31).optional(),
+  unpostedBalance: z.number().optional(),
+  installmentInfo: z.string().optional(),
 })
 
 const updateLoanSchema = z.object({
@@ -147,6 +155,9 @@ loanRouter.post('/list', async (_req: Request, res: Response) => {
       remainingPrincipal: Number(l.remainingPrincipal),
       annualRate: Number(l.annualRate),
       monthlyPayment: l.monthlyPayment ? Number(l.monthlyPayment) : null,
+      creditLimit: l.creditLimit ? Number(l.creditLimit) : null,
+      availableCredit: l.availableCredit ? Number(l.availableCredit) : null,
+      unpostedBalance: l.unpostedBalance ? Number(l.unpostedBalance) : null,
       progress: Number(l.principal) > 0 ? ((Number(l.principal) - Number(l.remainingPrincipal)) / Number(l.principal)) * 100 : 0,
     })),
   })
@@ -179,7 +190,14 @@ loanRouter.post('/create', validate(createLoanSchema), async (req: Request, res:
       paymentDay: data.paymentDay,
       monthlyPayment: monthlyPayment,
       linkedAccountId: data.linkedAccountId,
+      linkedCreditAccountId: data.linkedCreditAccountId,
       autoTrackRepayment: data.autoTrackRepayment ?? true,
+      creditLimit: data.creditLimit,
+      availableCredit: data.availableCredit,
+      billingDate: data.billingDate,
+      paymentDueDate: data.paymentDueDate,
+      unpostedBalance: data.unpostedBalance ?? 0,
+      installmentInfo: data.installmentInfo,
     },
     include: {
       linkedAccount: {

@@ -17,6 +17,9 @@ enum AccountType {
   BANK        // 银行卡
   CREDIT_CARD // 信用卡
   CASH        // 现金
+  HUABEI      // 花呗
+  BAITIAO     // 白条
+  DOUYIN_PAY  // 抖音月付
   OTHER       // 其他
 }
 
@@ -45,14 +48,29 @@ enum CleanType {
   DEPOSIT           // 充值
 }
 
-// 基金类型枚举
+// 基金类型枚举（保留用于兼容，扩展为投资产品类型）
 enum FundType {
-  STOCK  // 股票型
-  BOND   // 债券型
-  MIXED  // 混合型
-  MONEY  // 货币型
-  QDII   // QDII
+  STOCK  // 股票型基金
+  BOND   // 债券型基金
+  MIXED  // 混合型基金
+  MONEY  // 货币型基金
+  QDII   // QDII基金
+  WEALTH_MANAGEMENT // 理财产品
+  STOCK_PRODUCT     // 股票
   OTHER  // 其他
+}
+
+// 投资平台枚举
+enum InvestmentPlatform {
+  ALIPAY        // 支付宝
+  WECHAT        // 微信理财
+  TENCENT       // 腾讯理财通
+  JD_FINANCE    // 京东金融
+  BAIDU_WALLET  // 百度钱包
+  BANK_APP      // 银行APP
+  FUND_COMPANY  // 基金公司
+  STOCK_BROKER  // 券商
+  OTHER         // 其他
 }
 
 // 基金交易类型枚举
@@ -86,10 +104,24 @@ model Account {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // ========== 信用账户扩展字段 ==========
+  creditLimit         Decimal? @db.Decimal(15, 2) // 信用额度（信用卡/花呗/白条）
+  availableCredit     Decimal? @db.Decimal(15, 2) // 可用额度
+  billingDate         Int?     // 出账日（1-31）
+  paymentDueDate     Int?     // 还款日（1-31）
+  unpostedBalance    Decimal? @default(0) @db.Decimal(15, 2) // 未出账金额
+  installmentInfo    String?  // JSON: 分期信息 [{"months": 12, "amount": 500, "remainingMonths": 6, "monthlyPayment": 42.5}]
+  lastBillingDate    DateTime? @db.Date // 上次出账日
+  lastPaymentDate    DateTime? @db.Date // 上次还款日
+
+  // 关联的贷款记录ID（信用卡/花呗等同步到贷款管理后关联）
+  linkedLoanId       String?  @unique
+
   // 关联
   transactions Transaction[]
-  loans        Loan[]
-  
+  // 反向关联：此账户作为还款账户时的贷款列表
+  loans Loan[]
+
   @@map("accounts")
 }
 
@@ -126,15 +158,16 @@ model Transaction {
   @@map("transactions")
 }
 
-// 基金模型
+// 基金模型（重构为投资产品，保留表名funds保持向后兼容）
 model Fund {
   id            String   @id @default(uuid())
-  code          String   // 基金代码
-  name          String   // 基金名称
-  type          FundType @default(MIXED) // 基金类型
-  shares        Decimal  @default(0) @db.Decimal(15, 4) // 持有份额
+  code          String   // 产品代码/持仓编号
+  name          String   // 产品名称
+  type          FundType @default(MIXED) // 产品类型
+  platform      InvestmentPlatform @default(OTHER) // 投资平台
+  shares        Decimal  @default(0) @db.Decimal(15, 4) // 持有份额/数量
   costPerShare  Decimal  @default(0) @db.Decimal(10, 4) // 成本价
-  currentValue  Decimal  @default(0) @db.Decimal(15, 2) // 当前市值
+  currentValue  Decimal  @default(0) @db.Decimal(15, 2) // 当前市值/净值
   profit        Decimal  @default(0) @db.Decimal(15, 2) // 收益
   profitRate    Decimal  @default(0) @db.Decimal(8, 4) // 收益率
   targetWeight  Decimal? @db.Decimal(5, 4) // 目标配置权重
@@ -146,16 +179,16 @@ model Fund {
   // 关联
   transactions FundTransaction[]
 
-  @@unique([code])
+  @@unique([code, platform])
   @@map("funds")
 }
 
 // 基金交易记录模型
 model FundTransaction {
   id              String   @id @default(uuid())
-  fundId          String   // 关联基金
+  fundId          String   // 关联基金/投资产品
   type            FundTransactionType @default(BUY) // 交易类型
-  shares          Decimal  @db.Decimal(15, 4) // 份额
+  shares          Decimal  @db.Decimal(15, 4) // 份额/数量
   price           Decimal  @db.Decimal(10, 4) // 单价
   amount          Decimal  @db.Decimal(15, 2) // 金额
   transactionDate DateTime @default(now()) // 交易日期
@@ -220,7 +253,10 @@ enum LoanType {
   MORTGAGE    // 房贷
   CAR_LOAN    // 车贷
   CREDIT_CARD // 信用卡分期
-  OTHER       // 其他
+  HUABEI     // 花呗
+  BAITIAO    // 白条
+  DOUYIN_PAY // 抖音月付
+  OTHER      // 其他
 }
 
 // 净资产快照模型
@@ -280,15 +316,23 @@ model Loan {
   id                  String   @id @default(uuid())
   name                String   // 贷款名称
   loanType            LoanType @default(MORTGAGE) // 贷款类型
-  principal           Decimal  @db.Decimal(15, 2) // 初始本金
-  remainingPrincipal  Decimal  @db.Decimal(15, 2) // 剩余本金
+  principal           Decimal  @db.Decimal(15, 2) // 初始本金/总额
+  remainingPrincipal  Decimal  @db.Decimal(15, 2) // 剩余本金/已用额度
   annualRate          Decimal  @db.Decimal(5, 4) // 年化利率
   startDate           DateTime @db.Date // 开始日期
-  endDate             DateTime @db.Date // 结束日期
+  endDate             DateTime @db.Date // 结束日期（信用卡则为空）
   paymentDay          Int?     // 每月还款日
   monthlyPayment      Decimal? @db.Decimal(15, 2) // 月供金额
   linkedAccountId     String?  // 关联还款账户
+  linkedCreditAccountId String? // 关联的信用账户（信用卡/花呗/白条），非关系字段，仅用于业务关联
   autoTrackRepayment  Boolean  @default(true) // 自动跟踪还款
+  // 信用账户特有字段
+  creditLimit         Decimal? @db.Decimal(15, 2) // 信用额度（信用卡/花呗等）
+  availableCredit     Decimal? @db.Decimal(15, 2) // 可用额度
+  billingDate         Int?     // 出账日（1-31）
+  paymentDueDate     Int?     // 还款日（1-31）
+  unpostedBalance    Decimal? @db.Decimal(15, 2) // 未出账金额
+  installmentInfo    String?  // JSON: 分期信息
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

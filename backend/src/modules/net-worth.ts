@@ -35,9 +35,10 @@ async function calculateCurrentNetWorth() {
     .filter(a => a.isAsset)
     .reduce((sum, a) => sum + Number(a.balance), 0)
 
-  // 负债端（信用卡等）
+  // 负债端（信用卡/花呗/白条/抖音月付等信用账户，余额为已用额度）
+  const liabilityTypes = ['CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOuyin_PAY']
   const accountLiabilities = accounts
-    .filter(a => !a.isAsset)
+    .filter(a => !a.isAsset || liabilityTypes.includes(a.type as string))
     .reduce((sum, a) => sum + Math.abs(Number(a.balance)), 0)
 
   // 基金市值

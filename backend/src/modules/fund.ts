@@ -11,11 +11,12 @@ export const fundRouter: Router = Router()
 // ============================================
 
 const createFundSchema = z.object({
-  code: z.string().min(1).max(20),
+  code: z.string().min(1).max(50),
   name: z.string().min(1).max(100),
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'OTHER']).default('MIXED'),
-  shares: z.number().positive().optional().default(0),
-  costPerShare: z.number().positive().optional().default(0),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).default('MIXED'),
+  platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).default('OTHER'),
+  shares: z.number().optional().default(0),
+  costPerShare: z.number().optional().default(0),
   currentValue: z.number().optional().default(0),
   purchaseDate: z.string().optional(),
   remark: z.string().optional(),
@@ -24,7 +25,8 @@ const createFundSchema = z.object({
 const updateFundSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(100).optional(),
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'OTHER']).optional(),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).optional(),
+  platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).optional(),
   shares: z.number().optional(),
   costPerShare: z.number().optional(),
   currentValue: z.number().optional(),
@@ -34,7 +36,8 @@ const updateFundSchema = z.object({
 })
 
 const listFundsSchema = z.object({
-  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'OTHER']).optional(),
+  type: z.enum(['STOCK', 'BOND', 'MIXED', 'MONEY', 'QDII', 'WEALTH_MANAGEMENT', 'STOCK_PRODUCT', 'OTHER']).optional(),
+  platform: z.enum(['ALIPAY', 'WECHAT', 'TENCENT', 'JD_FINANCE', 'BAIDU_WALLET', 'BANK_APP', 'FUND_COMPANY', 'STOCK_BROKER', 'OTHER']).optional(),
 })
 
 const getFundSchema = z.object({
@@ -55,17 +58,33 @@ const createFundTransactionSchema = z.object({
 })
 
 // ============================================
+// Helper Functions
+// ============================================
+
+function convertFund(fund: any) {
+  return {
+    ...fund,
+    shares: Number(fund.shares),
+    costPerShare: Number(fund.costPerShare),
+    currentValue: Number(fund.currentValue),
+    profit: Number(fund.profit),
+    profitRate: Number(fund.profitRate),
+  }
+}
+
+// ============================================
 // Routes
 // ============================================
 
 /**
- * 获取基金列表
+ * 获取基金/投资产品列表
  */
 fundRouter.post('/list', validate(listFundsSchema), async (req: Request, res: Response) => {
-  const { type } = req.body
+  const { type, platform } = req.body
 
   const where: Prisma.FundWhereInput = {}
-  if (type) where.type = type
+  if (type) where.type = type as any
+  if (platform) where.platform = platform as any
 
   const funds = await prisma.fund.findMany({
     where,
@@ -74,12 +93,12 @@ fundRouter.post('/list', validate(listFundsSchema), async (req: Request, res: Re
 
   res.json({
     success: true,
-    data: funds,
+    data: funds.map(f => convertFund(f)),
   })
 })
 
 /**
- * 获取基金汇总
+ * 获取投资产品汇总
  */
 fundRouter.post('/summary', async (_req: Request, res: Response) => {
   const funds = await prisma.fund.findMany({
@@ -87,6 +106,7 @@ fundRouter.post('/summary', async (_req: Request, res: Response) => {
       currentValue: true,
       profit: true,
       type: true,
+      platform: true,
     },
   })
 
@@ -94,6 +114,7 @@ fundRouter.post('/summary', async (_req: Request, res: Response) => {
   const totalProfit = funds.reduce((sum, f) => sum + Number(f.profit), 0)
   const totalCost = totalValue - totalProfit
 
+  // 按产品类型分组
   const byType = funds.reduce((acc, item) => {
     const type = item.type
     if (!acc[type]) {
@@ -101,6 +122,17 @@ fundRouter.post('/summary', async (_req: Request, res: Response) => {
     }
     acc[type].value += Number(item.currentValue)
     acc[type].profit += Number(item.profit)
+    return acc
+  }, {} as Record<string, { value: number; profit: number }>)
+
+  // 按平台分组
+  const byPlatform = funds.reduce((acc, item) => {
+    const platform = item.platform
+    if (!acc[platform]) {
+      acc[platform] = { value: 0, profit: 0 }
+    }
+    acc[platform].value += Number(item.currentValue)
+    acc[platform].profit += Number(item.profit)
     return acc
   }, {} as Record<string, { value: number; profit: number }>)
 
@@ -113,12 +145,13 @@ fundRouter.post('/summary', async (_req: Request, res: Response) => {
       profitRate: totalCost > 0 ? (totalProfit / totalCost) * 100 : 0,
       fundCount: funds.length,
       byType,
+      byPlatform,
     },
   })
 })
 
 /**
- * 创建基金
+ * 创建投资产品
  */
 fundRouter.post('/create', validate(createFundSchema), async (req: Request, res: Response) => {
   const data = req.body
@@ -128,6 +161,7 @@ fundRouter.post('/create', validate(createFundSchema), async (req: Request, res:
       code: data.code,
       name: data.name,
       type: data.type,
+      platform: data.platform,
       shares: data.shares,
       costPerShare: data.costPerShare,
       currentValue: data.currentValue,
@@ -138,12 +172,12 @@ fundRouter.post('/create', validate(createFundSchema), async (req: Request, res:
 
   res.json({
     success: true,
-    data: fund,
+    data: convertFund(fund),
   })
 })
 
 /**
- * 获取基金详情
+ * 获取投资产品详情
  */
 fundRouter.post('/get', validate(getFundSchema), async (req: Request, res: Response) => {
   const { id } = req.body
@@ -168,12 +202,12 @@ fundRouter.post('/get', validate(getFundSchema), async (req: Request, res: Respo
 
   res.json({
     success: true,
-    data: fund,
+    data: convertFund(fund),
   })
 })
 
 /**
- * 更新基金
+ * 更新投资产品
  */
 fundRouter.post('/update', validate(updateFundSchema), async (req: Request, res: Response) => {
   const { id, ...data } = req.body
@@ -185,12 +219,12 @@ fundRouter.post('/update', validate(updateFundSchema), async (req: Request, res:
 
   res.json({
     success: true,
-    data: fund,
+    data: convertFund(fund),
   })
 })
 
 /**
- * 删除基金
+ * 删除投资产品
  */
 fundRouter.post('/delete', validate(deleteFundSchema), async (req: Request, res: Response) => {
   const { id } = req.body
@@ -205,7 +239,30 @@ fundRouter.post('/delete', validate(deleteFundSchema), async (req: Request, res:
 })
 
 /**
- * 添加基金交易记录
+ * 批量更新投资产品市值（方便定时刷新）
+ */
+fundRouter.post('/batch-update-value', async (req: Request, res: Response) => {
+  const { updates } = req.body as { updates: Array<{ id: string; currentValue: number; profit: number; profitRate: number }> }
+
+  if (!Array.isArray(updates)) {
+    res.status(400).json({ success: false, error: 'updates must be an array' })
+    return
+  }
+
+  await Promise.all(
+    updates.map(({ id, currentValue, profit, profitRate }) =>
+      prisma.fund.update({
+        where: { id },
+        data: { currentValue, profit, profitRate },
+      })
+    )
+  )
+
+  res.json({ success: true })
+})
+
+/**
+ * 添加投资产品交易记录
  */
 fundRouter.post('/transactions/create', validate(createFundTransactionSchema), async (req: Request, res: Response) => {
   const { fundId, type, shares, price, transactionDate, remark } = req.body
@@ -224,7 +281,7 @@ fundRouter.post('/transactions/create', validate(createFundTransactionSchema), a
     },
   })
 
-  // 更新基金持仓信息
+  // 更新投资产品持仓信息
   const fund = await prisma.fund.findUnique({ where: { id: fundId } })
   if (fund) {
     let newShares = Number(fund.shares)
@@ -255,7 +312,7 @@ fundRouter.post('/transactions/create', validate(createFundTransactionSchema), a
 })
 
 /**
- * 获取基金交易记录
+ * 获取投资产品交易记录
  */
 fundRouter.post('/transactions/list', async (req: Request, res: Response) => {
   const { fundId } = req.body
@@ -263,7 +320,7 @@ fundRouter.post('/transactions/list', async (req: Request, res: Response) => {
   const transactions = await prisma.fundTransaction.findMany({
     where: fundId ? { fundId } : undefined,
     include: {
-      fund: { select: { code: true, name: true } },
+      fund: { select: { code: true, name: true, platform: true } },
     },
     orderBy: { transactionDate: 'desc' },
     take: 50,

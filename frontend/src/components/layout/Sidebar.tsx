@@ -26,7 +26,7 @@ const navItems = [
   { path: '/health', icon: Heart, label: '财务健康' },
   { path: '/accounts', icon: Wallet, label: '账户管理' },
   { path: '/transactions', icon: Receipt, label: '交易流水' },
-  { path: '/funds', icon: TrendingUp, label: '基金持仓' },
+  { path: '/funds', icon: TrendingUp, label: '投资管理' },
   { path: '/loans', icon: Landmark, label: '贷款管理' },
   { path: '/recurring', icon: CalendarClock, label: '定期账单' },
   { path: '/automation', icon: Zap, label: '自动化规则' },

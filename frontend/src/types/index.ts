@@ -1,5 +1,5 @@
 // 账户类型
-export type AccountType = 'ALIPAY' | 'WECHAT' | 'BANK' | 'CREDIT_CARD' | 'CASH' | 'OTHER';
+export type AccountType = 'ALIPAY' | 'WECHAT' | 'BANK' | 'CREDIT_CARD' | 'CASH' | 'HUABEI' | 'BAITIAO' | 'DOUYIN_PAY' | 'OTHER';
 
 export interface Account {
   id: string;
@@ -15,6 +15,14 @@ export interface Account {
   includeNetWorth: boolean;
   createdAt: string;
   updatedAt: string;
+  // 信用账户扩展字段
+  creditLimit?: number | null;
+  availableCredit?: number | null;
+  billingDate?: number | null;
+  paymentDueDate?: number | null;
+  unpostedBalance?: number | null;
+  installmentInfo?: string | null;
+  linkedLoanId?: string | null;
 }
 
 export interface AccountSummary {
@@ -64,14 +72,18 @@ export interface TransactionStatistics {
   }>;
 }
 
-// 基金类型
-export type FundType = 'STOCK' | 'BOND' | 'MIXED' | 'MONEY' | 'QDII' | 'OTHER';
+// 基金类型（扩展为投资产品类型）
+export type FundType = 'STOCK' | 'BOND' | 'MIXED' | 'MONEY' | 'QDII' | 'WEALTH_MANAGEMENT' | 'STOCK_PRODUCT' | 'OTHER';
+
+// 投资平台
+export type InvestmentPlatform = 'ALIPAY' | 'WECHAT' | 'TENCENT' | 'JD_FINANCE' | 'BAIDU_WALLET' | 'BANK_APP' | 'FUND_COMPANY' | 'STOCK_BROKER' | 'OTHER';
 
 export interface Fund {
   id: string;
   code: string;
   name: string;
   type: FundType;
+  platform: InvestmentPlatform;
   shares: number;
   costPerShare: number;
   currentValue: number;
@@ -91,6 +103,7 @@ export interface FundSummary {
   profitRate: number;
   fundCount: number;
   byType: Record<string, { value: number; profit: number }>;
+  byPlatform: Record<string, { value: number; profit: number }>;
 }
 
 // 分类
@@ -186,7 +199,7 @@ export interface HealthReport {
 }
 
 // 贷款类型
-export type LoanType = 'MORTGAGE' | 'CAR_LOAN' | 'CREDIT_CARD' | 'OTHER';
+export type LoanType = 'MORTGAGE' | 'CAR_LOAN' | 'CREDIT_CARD' | 'HUABEI' | 'BAITIAO' | 'DOUYIN_PAY' | 'OTHER';
 
 // 贷款
 export interface Loan {
@@ -201,6 +214,7 @@ export interface Loan {
   paymentDay: number | null;
   monthlyPayment: number | null;
   linkedAccountId: string | null;
+  linkedCreditAccountId: string | null;
   autoTrackRepayment: boolean;
   progress: number;
   linkedAccount?: {
@@ -208,6 +222,18 @@ export interface Loan {
     name: string;
     type: AccountType;
   };
+  creditAccount?: {
+    id: string;
+    name: string;
+    type: AccountType;
+  };
+  // 信用账户特有字段
+  creditLimit?: number | null;
+  availableCredit?: number | null;
+  billingDate?: number | null;
+  paymentDueDate?: number | null;
+  unpostedBalance?: number | null;
+  installmentInfo?: string | null;
   createdAt: string;
   updatedAt: string;
 }

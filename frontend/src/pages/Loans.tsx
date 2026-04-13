@@ -35,11 +35,14 @@ import {
 } from 'lucide-react';
 import type { LoanType } from '@/types';
 
-const loanTypeLabels: Record<LoanType, { label: string; icon: React.ElementType }> = {
-  MORTGAGE: { label: '房贷', icon: Home },
-  CAR_LOAN: { label: '车贷', icon: Car },
-  CREDIT_CARD: { label: '信用卡分期', icon: CreditCard },
-  OTHER: { label: '其他', icon: CreditCard },
+const loanTypeLabels: Record<LoanType, { label: string; icon: React.ElementType; category: 'traditional' | 'credit' }> = {
+  MORTGAGE: { label: '房贷', icon: Home, category: 'traditional' },
+  CAR_LOAN: { label: '车贷', icon: Car, category: 'traditional' },
+  CREDIT_CARD: { label: '信用卡', icon: CreditCard, category: 'credit' },
+  HUABEI: { label: '花呗', icon: CreditCard, category: 'credit' },
+  BAITIAO: { label: '白条', icon: CreditCard, category: 'credit' },
+  DOUYIN_PAY: { label: '抖音月付', icon: CreditCard, category: 'credit' },
+  OTHER: { label: '其他', icon: CreditCard, category: 'traditional' },
 };
 
 function formatMoney(amount: number) {
@@ -359,6 +362,10 @@ export default function Loans() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<any>(null);
 
+  // 分离信用账户和传统贷款
+  const creditLoans = loans?.filter(l => loanTypeLabels[l.loanType]?.category === 'credit') || [];
+  const traditionalLoans = loans?.filter(l => loanTypeLabels[l.loanType]?.category === 'traditional') || [];
+
   const handleSubmit = (data: any) => {
     if (editingLoan) {
       updateMutation.mutate({ id: editingLoan.id, ...data }, {
@@ -402,7 +409,7 @@ export default function Loans() {
               贷款管理
             </h1>
             <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-body)', marginTop: 'var(--spacing-xs)' }}>
-              管理房贷、车贷等各类贷款
+              管理信用卡、花呗、白条、房贷、车贷等各类负债
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -428,100 +435,224 @@ export default function Loans() {
           </Dialog>
         </FadeIn>
 
-        {/* 贷款列表 */}
-        <Stagger className="space-y-4">
-          {loans?.map((loan) => {
-            const typeConfig = loanTypeLabels[loan.loanType];
-            const Icon = typeConfig?.icon || CreditCard;
-            return (
-              <FadeIn key={loan.id}>
-                <Card>
-                  <CardContent style={{ padding: 'var(--spacing-lg)' }}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                          <Icon className="h-6 w-6 text-destructive" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
-                              {loan.name}
-                            </h3>
-                            <Badge variant="secondary">{typeConfig?.label}</Badge>
+        {/* 信用账户（信用卡/花呗/白条/抖音月付） */}
+        {creditLoans.length > 0 && (
+          <div>
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              信用账户
+            </h2>
+            <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {creditLoans.map((loan) => {
+                const typeConfig = loanTypeLabels[loan.loanType];
+                const Icon = typeConfig?.icon || CreditCard;
+                return (
+                  <FadeIn key={loan.id}>
+                    <Card className="border-destructive/20">
+                      <CardContent style={{ padding: 'var(--spacing-lg)' }}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                              <Icon className="h-6 w-6 text-destructive" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
+                                  {loan.name}
+                                </h3>
+                                <Badge variant="secondary">{typeConfig?.label}</Badge>
+                              </div>
+                              <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                                已用 {formatMoney(loan.remainingPrincipal)}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
-                            剩余本金 {formatMoney(loan.remainingPrincipal)}
-                          </p>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setEditingLoan(loan);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => handleDelete(loan.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <PaymentScheduleDialog loanId={loan.id} loanName={loan.name} />
-                        <PrepaySimulateDialog
-                          loanId={loan.id}
-                          loanName={loan.name}
-                          remainingPrincipal={loan.remainingPrincipal}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setEditingLoan(loan);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => handleDelete(loan.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
-                      <div>
-                        <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>月供</p>
-                        <p className="font-semibold">{loan.monthlyPayment ? formatMoney(loan.monthlyPayment) : '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>年利率</p>
-                        <p className="font-semibold">{(loan.annualRate * 100).toFixed(2)}%</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款进度</p>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary"
-                              style={{ width: `${loan.progress}%` }}
-                            />
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                          {loan.creditLimit && (
+                            <>
+                              <div>
+                                <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>信用额度</p>
+                                <p className="font-semibold">{formatMoney(loan.creditLimit)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>可用额度</p>
+                                <p className={`font-semibold ${(loan.availableCredit ?? 0) < (loan.creditLimit ?? 0) * 0.2 ? 'text-destructive' : 'text-success'}`}>
+                                  {formatMoney(loan.availableCredit ?? (loan.creditLimit - loan.remainingPrincipal))}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                          <div>
+                            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>使用率</p>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-destructive"
+                                  style={{ width: `${loan.creditLimit ? Math.min(100, (loan.remainingPrincipal / loan.creditLimit) * 100) : 0}%` }}
+                                />
+                              </div>
+                              <span style={{ fontSize: 'var(--font-size-small)' }}>
+                                {loan.creditLimit ? ((loan.remainingPrincipal / loan.creditLimit) * 100).toFixed(1) : 0}%
+                              </span>
+                            </div>
                           </div>
-                          <span style={{ fontSize: 'var(--font-size-small)' }}>{loan.progress.toFixed(1)}%</span>
+                          {(loan.billingDate || loan.paymentDueDate) && (
+                            <>
+                              {loan.billingDate && (
+                                <div>
+                                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>出账日</p>
+                                  <p className="font-semibold">每月{loan.billingDate}号</p>
+                                </div>
+                              )}
+                              {loan.paymentDueDate && (
+                                <div>
+                                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款日</p>
+                                  <p className="font-semibold">每月{loan.paymentDueDate}号</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {loan.unpostedBalance && loan.unpostedBalance > 0 && (
+                            <div>
+                              <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>未出账</p>
+                              <p className="font-semibold text-warning">{formatMoney(loan.unpostedBalance)}</p>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款日</p>
-                        <p className="font-semibold">{loan.paymentDay ? `每月${loan.paymentDay}号` : '-'}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </FadeIn>
-            );
-          })}
-        </Stagger>
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+                );
+              })}
+            </Stagger>
+          </div>
+        )}
+
+        {/* 传统贷款（房贷/车贷等） */}
+        {traditionalLoans.length > 0 && (
+          <div>
+            <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <Home className="h-5 w-5" />
+              传统贷款
+            </h2>
+            <Stagger className="space-y-4">
+              {traditionalLoans.map((loan) => {
+                const typeConfig = loanTypeLabels[loan.loanType];
+                const Icon = typeConfig?.icon || CreditCard;
+                return (
+                  <FadeIn key={loan.id}>
+                    <Card>
+                      <CardContent style={{ padding: 'var(--spacing-lg)' }}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                              <Icon className="h-6 w-6 text-destructive" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
+                                  {loan.name}
+                                </h3>
+                                <Badge variant="secondary">{typeConfig?.label}</Badge>
+                              </div>
+                              <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                                剩余本金 {formatMoney(loan.remainingPrincipal)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <PaymentScheduleDialog loanId={loan.id} loanName={loan.name} />
+                            <PrepaySimulateDialog
+                              loanId={loan.id}
+                              loanName={loan.name}
+                              remainingPrincipal={loan.remainingPrincipal}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setEditingLoan(loan);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => handleDelete(loan.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
+                          <div>
+                            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>月供</p>
+                            <p className="font-semibold">{loan.monthlyPayment ? formatMoney(loan.monthlyPayment) : '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>年利率</p>
+                            <p className="font-semibold">{(loan.annualRate * 100).toFixed(2)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款进度</p>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-primary"
+                                  style={{ width: `${loan.progress}%` }}
+                                />
+                              </div>
+                              <span style={{ fontSize: 'var(--font-size-small)' }}>{loan.progress.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款日</p>
+                            <p className="font-semibold">{loan.paymentDay ? `每月${loan.paymentDay}号` : '-'}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </FadeIn>
+                );
+              })}
+            </Stagger>
+          </div>
+        )}
 
         {loans?.length === 0 && (
           <FadeIn>
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Home className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">暂无贷款记录</p>
+                <p className="text-muted-foreground">暂无贷款记录，点击上方按钮添加</p>
               </CardContent>
             </Card>
           </FadeIn>
