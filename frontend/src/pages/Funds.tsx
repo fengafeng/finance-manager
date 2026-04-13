@@ -1,0 +1,417 @@
+import { useState } from 'react';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { FadeIn, Stagger } from '@/components/MotionPrimitives';
+import { useFunds, useFundSummary, useCreateFund, useUpdateFund, useDeleteFund } from '@/hooks/use-funds';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import {
+  Plus,
+  Edit,
+  Trash2,
+  BarChart3,
+  ArrowUpRight,
+  ArrowDownRight,
+} from 'lucide-react';
+import type { Fund, FundType } from '@/types';
+
+const fundTypeLabels: Record<FundType, string> = {
+  STOCK: '股票型',
+  BOND: '债券型',
+  MIXED: '混合型',
+  MONEY: '货币型',
+  QDII: 'QDII',
+  OTHER: '其他',
+};
+
+function formatMoney(amount: number) {
+  return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(value: number) {
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function FundForm({
+  fund,
+  onSubmit,
+  onCancel,
+}: {
+  fund?: Fund | null;
+  onSubmit: (data: Partial<Fund>) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState(fund?.code || '');
+  const [name, setName] = useState(fund?.name || '');
+  const [type, setType] = useState<FundType>(fund?.type || 'MIXED');
+  const [shares, setShares] = useState(fund?.shares?.toString() || '0');
+  const [costPerShare, setCostPerShare] = useState(fund?.costPerShare?.toString() || '0');
+  const [currentValue, setCurrentValue] = useState(fund?.currentValue?.toString() || '0');
+  const [remark, setRemark] = useState(fund?.remark || '');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      code,
+      name,
+      type,
+      shares: parseFloat(shares) || 0,
+      costPerShare: parseFloat(costPerShare) || 0,
+      currentValue: parseFloat(currentValue) || 0,
+      remark,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="code">基金代码</Label>
+          <Input
+            id="code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="000000"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="type">基金类型</Label>
+          <Select value={type} onValueChange={(v) => setType(v as FundType)}>
+            <SelectTrigger>
+              <SelectValue placeholder="选择类型" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(fundTypeLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="name">基金名称</Label>
+        <Input
+          id="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="请输入基金名称"
+          required
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="shares">持有份额</Label>
+          <Input
+            id="shares"
+            type="number"
+            step="0.01"
+            value={shares}
+            onChange={(e) => setShares(e.target.value)}
+            placeholder="0"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="costPerShare">成本价</Label>
+          <Input
+            id="costPerShare"
+            type="number"
+            step="0.0001"
+            value={costPerShare}
+            onChange={(e) => setCostPerShare(e.target.value)}
+            placeholder="0.0000"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="currentValue">当前市值</Label>
+          <Input
+            id="currentValue"
+            type="number"
+            step="0.01"
+            value={currentValue}
+            onChange={(e) => setCurrentValue(e.target.value)}
+            placeholder="0.00"
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="remark">备注</Label>
+        <Input
+          id="remark"
+          value={remark}
+          onChange={(e) => setRemark(e.target.value)}
+          placeholder="可选备注"
+        />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          取消
+        </Button>
+        <Button type="submit">{fund ? '更新' : '创建'}</Button>
+      </div>
+    </form>
+  );
+}
+
+export default function Funds() {
+  const { data: funds, isLoading } = useFunds();
+  const { data: summary } = useFundSummary();
+  const createMutation = useCreateFund();
+  const updateMutation = useUpdateFund();
+  const deleteMutation = useDeleteFund();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingFund, setEditingFund] = useState<Fund | null>(null);
+
+  const handleSubmit = (data: Partial<Fund>) => {
+    // 计算收益
+    const cost = (data.shares || 0) * (data.costPerShare || 0);
+    const currentValue = data.currentValue || 0;
+    const profit = currentValue - cost;
+    const profitRate = cost > 0 ? (profit / cost) * 100 : 0;
+
+    const fundData = {
+      ...data,
+      profit,
+      profitRate,
+    };
+
+    if (editingFund) {
+      updateMutation.mutate({ id: editingFund.id, ...fundData }, {
+        onSuccess: () => {
+          setDialogOpen(false);
+          setEditingFund(null);
+        },
+      });
+    } else {
+      createMutation.mutate(fundData, {
+        onSuccess: () => {
+          setDialogOpen(false);
+        },
+      });
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('确定要删除这个基金吗？')) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="space-y-4">
+          <Skeleton className="h-32" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-40" />
+            ))}
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <div style={{ gap: 'var(--spacing-xl)' }} className="flex flex-col">
+        {/* 页面标题 */}
+        <FadeIn className="flex items-center justify-between">
+          <div>
+            <h1 className="font-bold" style={{ fontSize: 'var(--font-size-headline)' }}>
+              基金持仓
+            </h1>
+            <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-body)', marginTop: 'var(--spacing-xs)' }}>
+              管理您的基金投资组合
+            </p>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingFund(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                新增基金
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingFund ? '编辑基金' : '新增基金'}</DialogTitle>
+              </DialogHeader>
+              <FundForm
+                fund={editingFund}
+                onSubmit={handleSubmit}
+                onCancel={() => {
+                  setDialogOpen(false);
+                  setEditingFund(null);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </FadeIn>
+
+        {/* 汇总卡片 */}
+        <FadeIn>
+          <Card className="bg-gradient-to-r from-primary/10 to-primary/5">
+            <CardContent style={{ padding: 'var(--spacing-xl)' }}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div>
+                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-label)' }}>
+                    总市值
+                  </p>
+                  <p className="font-bold" style={{ fontSize: 'var(--font-size-headline)' }}>
+                    {formatMoney(summary?.totalValue || 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-label)' }}>
+                    总成本
+                  </p>
+                  <p className="font-bold" style={{ fontSize: 'var(--font-size-headline)' }}>
+                    {formatMoney(summary?.totalCost || 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-label)' }}>
+                    总收益
+                  </p>
+                  <p
+                    className={`font-bold ${summary && summary.totalProfit >= 0 ? 'text-success' : 'text-destructive'}`}
+                    style={{ fontSize: 'var(--font-size-headline)' }}
+                  >
+                    {summary && summary.totalProfit >= 0 ? '+' : ''}{formatMoney(summary?.totalProfit || 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-label)' }}>
+                    收益率
+                  </p>
+                  <p
+                    className={`font-bold ${summary && summary.profitRate >= 0 ? 'text-success' : 'text-destructive'}`}
+                    style={{ fontSize: 'var(--font-size-headline)' }}
+                  >
+                    {formatPercent(summary?.profitRate || 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </FadeIn>
+
+        {/* 基金列表 */}
+        <Stagger className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {funds?.map((fund) => (
+            <FadeIn key={fund.id}>
+              <Card className="hover:shadow-md transition-shadow">
+                <CardContent style={{ padding: 'var(--spacing-lg)' }}>
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
+                          {fund.name}
+                        </p>
+                        <Badge variant="secondary" style={{ fontSize: 'var(--font-size-small)' }}>
+                          {fundTypeLabels[fund.type]}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                        {fund.code} · {fund.shares}份
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => {
+                          setEditingFund(fund);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => handleDelete(fund.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                        市值
+                      </p>
+                      <p className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
+                        {formatMoney(fund.currentValue)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                        成本价
+                      </p>
+                      <p className="font-semibold" style={{ fontSize: 'var(--font-size-label)' }}>
+                        ¥{fund.costPerShare.toFixed(4)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>
+                        收益
+                      </p>
+                      <div className="flex items-center gap-1">
+                        {fund.profit >= 0 ? (
+                          <ArrowUpRight className="h-4 w-4 text-success" />
+                        ) : (
+                          <ArrowDownRight className="h-4 w-4 text-destructive" />
+                        )}
+                        <p
+                          className={`font-semibold ${fund.profit >= 0 ? 'text-success' : 'text-destructive'}`}
+                          style={{ fontSize: 'var(--font-size-label)' }}
+                        >
+                          {formatPercent(fund.profitRate)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </FadeIn>
+          ))}
+        </Stagger>
+
+        {funds?.length === 0 && (
+          <FadeIn>
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">暂无基金持仓，点击上方按钮添加</p>
+              </CardContent>
+            </Card>
+          </FadeIn>
+        )}
+      </div>
+    </MainLayout>
+  );
+}

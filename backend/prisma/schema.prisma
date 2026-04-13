@@ -1,0 +1,340 @@
+// Prisma Schema for Application
+// PostgreSQL database with TypeScript ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 账户类型枚举
+enum AccountType {
+  ALIPAY      // 支付宝
+  WECHAT      // 微信
+  BANK        // 银行卡
+  CREDIT_CARD // 信用卡
+  CASH        // 现金
+  OTHER       // 其他
+}
+
+// 交易类型枚举
+enum TransactionType {
+  INCOME    // 收入
+  EXPENSE   // 支出
+  TRANSFER  // 转账
+  REFUND    // 退款
+}
+
+// 交易来源类型枚举
+enum SourceType {
+  MANUAL        // 手动录入
+  IMPORT_ALIPAY // 支付宝导入
+  IMPORT_WECHAT // 微信导入
+  IMPORT_BANK   // 银行导入
+}
+
+// 清洗类型枚举
+enum CleanType {
+  NORMAL            // 正常交易
+  REFUND            // 退款
+  INTERNAL_TRANSFER // 内部转账
+  WITHDRAWAL        // 提现
+  DEPOSIT           // 充值
+}
+
+// 基金类型枚举
+enum FundType {
+  STOCK  // 股票型
+  BOND   // 债券型
+  MIXED  // 混合型
+  MONEY  // 货币型
+  QDII   // QDII
+  OTHER  // 其他
+}
+
+// 基金交易类型枚举
+enum FundTransactionType {
+  BUY     // 买入
+  SELL    // 卖出
+  DIVIDEND // 分红
+}
+
+// 导入状态枚举
+enum ImportStatus {
+  PENDING    // 待处理
+  PROCESSING // 处理中
+  COMPLETED  // 已完成
+  FAILED     // 失败
+}
+
+// 账户模型
+model Account {
+  id              String   @id @default(uuid())
+  name            String   // 账户名称
+  type            AccountType @default(OTHER) // 账户类型
+  icon            String?  // 图标
+  color           String?  // 颜色
+  balance         Decimal  @default(0) @db.Decimal(15, 2) // 余额
+  currency        String   @default("CNY") // 币种
+  remark          String?  // 备注
+  isArchived      Boolean  @default(false) // 是否归档
+  isAsset         Boolean  @default(true) // 是否为资产（false表示负债）
+  includeNetWorth Boolean  @default(true) // 是否纳入净资产计算
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 关联
+  transactions Transaction[]
+  loans        Loan[]
+  
+  @@map("accounts")
+}
+
+// 交易流水模型
+model Transaction {
+  id              String   @id @default(uuid())
+  accountId       String   // 关联账户
+  type            TransactionType @default(EXPENSE) // 交易类型
+  amount          Decimal  @db.Decimal(15, 2) // 金额
+  category        String?  // 分类
+  tags            String[] // 标签
+  merchant        String?  // 商家/来源
+  description     String?  // 描述/备注
+  transactionDate DateTime @default(now()) // 交易日期
+  sourceType      SourceType @default(MANUAL) // 来源类型
+  sourceRef       String?  // 来源引用ID
+  isCleaned       Boolean  @default(false) // 是否已清洗
+  cleanType       CleanType? // 清洗类型
+  isRecurring     Boolean  @default(false) // 是否为周期性交易
+  recurringBillId String?  // 关联的定期账单ID
+  needsReview     Boolean  @default(false) // 是否需要人工复核
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 关联
+  account      Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  attachments  TransactionAttachment[]
+  recurringBill RecurringBill?   @relation(fields: [recurringBillId], references: [id])
+
+  @@index([accountId])
+  @@index([transactionDate])
+  @@index([type])
+  @@index([isRecurring])
+  @@map("transactions")
+}
+
+// 基金模型
+model Fund {
+  id            String   @id @default(uuid())
+  code          String   // 基金代码
+  name          String   // 基金名称
+  type          FundType @default(MIXED) // 基金类型
+  shares        Decimal  @default(0) @db.Decimal(15, 4) // 持有份额
+  costPerShare  Decimal  @default(0) @db.Decimal(10, 4) // 成本价
+  currentValue  Decimal  @default(0) @db.Decimal(15, 2) // 当前市值
+  profit        Decimal  @default(0) @db.Decimal(15, 2) // 收益
+  profitRate    Decimal  @default(0) @db.Decimal(8, 4) // 收益率
+  targetWeight  Decimal? @db.Decimal(5, 4) // 目标配置权重
+  purchaseDate  DateTime? // 买入日期
+  remark        String?  // 备注
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关联
+  transactions FundTransaction[]
+
+  @@unique([code])
+  @@map("funds")
+}
+
+// 基金交易记录模型
+model FundTransaction {
+  id              String   @id @default(uuid())
+  fundId          String   // 关联基金
+  type            FundTransactionType @default(BUY) // 交易类型
+  shares          Decimal  @db.Decimal(15, 4) // 份额
+  price           Decimal  @db.Decimal(10, 4) // 单价
+  amount          Decimal  @db.Decimal(15, 2) // 金额
+  transactionDate DateTime @default(now()) // 交易日期
+  remark          String?  // 备注
+  createdAt       DateTime @default(now())
+
+  // 关联
+  fund Fund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+
+  @@index([fundId])
+  @@index([transactionDate])
+  @@map("fund_transactions")
+}
+
+// 分类模型
+model Category {
+  id        String   @id @default(uuid())
+  name      String   // 分类名称
+  type      TransactionType @default(EXPENSE) // 类型（收入/支出）
+  icon      String?  // 图标
+  color     String?  // 颜色
+  parentId  String?  // 父分类ID
+  sortOrder Int      @default(0) // 排序
+  createdAt DateTime @default(now())
+
+  // 自引用关联
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  @@index([type])
+  @@index([parentId])
+  @@map("categories")
+}
+
+// 导入记录模型
+model ImportRecord {
+  id           String   @id @default(uuid())
+  sourceType   SourceType @default(IMPORT_ALIPAY) // 来源类型
+  fileName     String   // 文件名
+  totalCount   Int      @default(0) // 总记录数
+  successCount Int      @default(0) // 成功导入数
+  skipCount    Int      @default(0) // 跳过数
+  status       ImportStatus @default(PENDING) // 状态
+  errorMessage String?  // 错误信息
+  createdAt    DateTime @default(now())
+
+  @@map("import_records")
+}
+
+// ==================== 二期新增模型 ====================
+
+// 周期类型枚举
+enum CycleType {
+  DAILY   // 每日
+  WEEKLY  // 每周
+  MONTHLY // 每月
+  YEARLY  // 每年
+}
+
+// 贷款类型枚举
+enum LoanType {
+  MORTGAGE    // 房贷
+  CAR_LOAN    // 车贷
+  CREDIT_CARD // 信用卡分期
+  OTHER       // 其他
+}
+
+// 净资产快照模型
+model NetWorthSnapshot {
+  id             String   @id @default(uuid())
+  snapshotDate   DateTime @db.Date // 快照日期
+  totalAssets    Decimal  @db.Decimal(15, 2) // 总资产
+  totalLiabilities Decimal @db.Decimal(15, 2) // 总负债
+  netWorth       Decimal  @db.Decimal(15, 2) // 净资产
+  assetBreakdown String?  // JSON: 资产构成明细
+  createdAt      DateTime @default(now())
+
+  @@unique([snapshotDate])
+  @@index([snapshotDate])
+  @@map("net_worth_snapshots")
+}
+
+// 定期账单模型
+model RecurringBill {
+  id                    String   @id @default(uuid())
+  name                  String   // 账单名称
+  merchantPattern       String?  // 商户匹配模式
+  amountPattern         String?  // 金额模式
+  cycleType             CycleType @default(MONTHLY) // 周期类型
+  cycleDay              Int?     // 周期内的日期
+  nextDueDate           DateTime? @db.Date // 下次到期日期
+  reminderDays          Int      @default(3) // 提前几天提醒
+  isActive              Boolean  @default(true)
+  lastMatchedAt         DateTime? // 最近匹配时间
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // 关联
+  transactions Transaction[]
+
+  @@map("recurring_bills")
+}
+
+// 自动化规则模型
+model AutomationRule {
+  id            String   @id @default(uuid())
+  name          String   // 规则名称
+  triggerType   String   // 触发类型
+  triggerConfig String   // JSON: 触发条件配置
+  actionType    String   // 动作类型
+  actionConfig  String   // JSON: 动作配置
+  priority      Int      @default(0) // 优先级
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("automation_rules")
+}
+
+// 贷款模型
+model Loan {
+  id                  String   @id @default(uuid())
+  name                String   // 贷款名称
+  loanType            LoanType @default(MORTGAGE) // 贷款类型
+  principal           Decimal  @db.Decimal(15, 2) // 初始本金
+  remainingPrincipal  Decimal  @db.Decimal(15, 2) // 剩余本金
+  annualRate          Decimal  @db.Decimal(5, 4) // 年化利率
+  startDate           DateTime @db.Date // 开始日期
+  endDate             DateTime @db.Date // 结束日期
+  paymentDay          Int?     // 每月还款日
+  monthlyPayment      Decimal? @db.Decimal(15, 2) // 月供金额
+  linkedAccountId     String?  // 关联还款账户
+  autoTrackRepayment  Boolean  @default(true) // 自动跟踪还款
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // 关联
+  linkedAccount Account? @relation(fields: [linkedAccountId], references: [id])
+
+  @@map("loans")
+}
+
+// 交易附件模型
+model TransactionAttachment {
+  id             String   @id @default(uuid())
+  transactionId  String   // 关联交易
+  fileName       String   // 文件名
+  filePath       String   // 文件路径
+  fileType       String?  // 文件类型
+  ocrResult      String?  // OCR识别结果JSON
+  uploadedAt     DateTime @default(now())
+
+  // 关联
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@map("transaction_attachments")
+}
+
+// 自定义报表模板模型
+model ReportTemplate {
+  id        String   @id @default(uuid())
+  name      String   // 模板名称
+  config    String   // JSON: 报表配置
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("report_templates")
+}
+
+// 财务健康报告模型
+model HealthReport {
+  id              String   @id @default(uuid())
+  reportDate      DateTime @db.Date // 报告日期
+  totalScore      Decimal? @db.Decimal(5, 2) // 综合得分
+  dimensionScores String?  // JSON: 各维度得分
+  suggestions     String?  // AI生成的改进建议
+  createdAt       DateTime @default(now())
+
+  @@unique([reportDate])
+  @@map("health_reports")
+}

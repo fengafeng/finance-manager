@@ -1,0 +1,62 @@
+[
+  {
+    "pageKey": "Dashboard",
+    "title": "数据看板",
+    "url": "/"
+  },
+  {
+    "pageKey": "Accounts",
+    "title": "账户管理",
+    "url": "/accounts"
+  },
+  {
+    "pageKey": "AIChat",
+    "title": "AI助手",
+    "url": "/ai-chat"
+  },
+  {
+    "pageKey": "Automation",
+    "title": "自动化规则",
+    "url": "/automation"
+  },
+  {
+    "pageKey": "Funds",
+    "title": "基金持仓",
+    "url": "/funds"
+  },
+  {
+    "pageKey": "Health",
+    "title": "财务健康",
+    "url": "/health"
+  },
+  {
+    "pageKey": "Loans",
+    "title": "贷款管理",
+    "url": "/loans"
+  },
+  {
+    "pageKey": "NetWorth",
+    "title": "资产全景",
+    "url": "/net-worth"
+  },
+  {
+    "pageKey": "Recurring",
+    "title": "定期账单",
+    "url": "/recurring"
+  },
+  {
+    "pageKey": "Reports",
+    "title": "报表分析",
+    "url": "/reports"
+  },
+  {
+    "pageKey": "Settings",
+    "title": "系统设置",
+    "url": "/settings"
+  },
+  {
+    "pageKey": "Transactions",
+    "title": "交易流水",
+    "url": "/transactions"
+  }
+]

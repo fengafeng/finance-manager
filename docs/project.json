@@ -1,0 +1,8 @@
+{
+  "project_type": "web",
+  "sub_project_type": "",
+  "name": "财务管家",
+  "app_slug": "finance-manager",
+  "version_description": "二期开发完成：AI助手、贷款管理、定期账单、自动化规则",
+  "preview_type": "pc"
+}
