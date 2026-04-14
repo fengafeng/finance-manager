@@ -28,16 +28,19 @@
   "dependencies": {
     "@prisma/client": "^6.1.0",
     "@supabase/supabase-js": "^2.88.0",
+    "@types/iconv-lite": "^0.0.1",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-async-errors": "^3.1.1",
+    "iconv-lite": "^0.7.2",
     "multer": "^2.1.1",
     "openai": "^6.34.0",
     "pino": "^10.1.0",
     "pino-http": "^11.0.0",
     "tencentcloud-sdk-nodejs-hunyuan": "^4.1.188",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -49,9 +49,8 @@ export function useImportUpload() {
       if (accountId) {
         formData.append('accountId', accountId);
       }
-      const response = await apiClient.post('/import/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // 注意：不要手动设置 Content-Type，让 axios 自动添加 boundary
+      const response = await apiClient.post('/import/upload', formData);
       return response.data;
     },
   });

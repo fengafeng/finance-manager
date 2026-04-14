@@ -67,6 +67,89 @@ const statusColors: Record<LoanStatus, string> = {
 // 信用账户类型（用于智能添加）
 const CREDIT_LOAN_TYPES: LoanType[] = ['CREDIT_CARD', 'HUABEI', 'BAITIAO', 'DOUYIN_PAY'];
 
+// 银行还款日自动计算规则
+// 出账日后的固定天数
+const BANK_REPAYMENT_RULES: Record<string, number> = {
+  // 工商银行：出账日后25天
+  '工商银行': 25,
+  '工行': 25,
+  // 建设银行：还款日固定为每月5日（需手动设置）
+  '建设银行': 0, // 需要手动设置
+  '建行': 0,
+  // 中国银行：出账日后20天
+  '中国银行': 20,
+  '中行': 20,
+  // 农业银行：出账日后17天
+  '农业银行': 17,
+  '农行': 17,
+  // 招商银行：出账日后18天
+  '招商银行': 18,
+  '招行': 18,
+  // 交通银行：出账日后24天
+  '交通银行': 24,
+  '交行': 24,
+  // 兴业银行：出账日后18天
+  '兴业银行': 18,
+  // 中信银行：出账日后18天
+  '中信银行': 18,
+  '中信': 18,
+  // 民生银行：出账日后19天
+  '民生银行': 19,
+  '民生': 19,
+  // 浦发银行：出账日后18天
+  '浦发银行': 18,
+  '浦发': 18,
+  // 广发银行：出账日后18天
+  '广发银行': 18,
+  '广发': 18,
+  // 平安银行：出账日后18天
+  '平安银行': 18,
+  '平安': 18,
+  // 光大银行：出账日后19天
+  '光大银行': 19,
+  '光大': 19,
+  // 华夏银行：出账日后18天
+  '华夏银行': 18,
+  '华夏': 18,
+  // 花呗：出账日后8-9天（每月8/9日）
+  '花呗': 8,
+  // 白条：出账日后10天
+  '白条': 10,
+  // 抖音月付：出账日后15天
+  '抖音月付': 15,
+  // 默认：出账日后15天
+  '默认': 15,
+};
+
+// 根据出账日计算还款日
+function calculatePaymentDueDate(billingDate: number, bankName?: string): number | null {
+  if (!billingDate) return null;
+  
+  // 如果有银行名称，查找规则
+  if (bankName) {
+    let daysAfter = BANK_REPAYMENT_RULES['默认'];
+    for (const [bank, days] of Object.entries(BANK_REPAYMENT_RULES)) {
+      if (bankName.includes(bank) && days !== 0) {
+        daysAfter = days;
+        break;
+      }
+    }
+    
+    // 计算还款日
+    if (daysAfter === 0) {
+      return null; // 需要手动设置
+    }
+    let dueDate = billingDate + daysAfter;
+    if (dueDate > 31) dueDate -= 31; // 跨月
+    return dueDate;
+  }
+  
+  // 默认：出账日后15天
+  let dueDate = billingDate + 15;
+  if (dueDate > 31) dueDate -= 31;
+  return dueDate;
+}
+
 // 贷款专用智能添加对话框（只添加信用卡/花呗等信用账户）
 function LoanNaturalAddDialog({ trigger }: { trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -388,8 +471,54 @@ function LoanForm({
   const [dueDate, setDueDate] = useState(loan?.dueDate ? (loan.dueDate.split('T')[0] || '') : '');
   const [status, setStatus] = useState<LoanStatus>(loan?.status || 'PENDING');
   const [remark, setRemark] = useState(loan?.remark || '');
+  
+  // 信用卡特有字段
+  const [creditLimit, setCreditLimit] = useState(loan?.creditLimit?.toString() || '');
+  const [billingDate, setBillingDate] = useState(loan?.billingDate?.toString() || '');
+  const [paymentDueDate, setPaymentDueDate] = useState(loan?.paymentDueDate?.toString() || '');
+  const [unpostedBalance, setUnpostedBalance] = useState(loan?.unpostedBalance?.toString() || '');
+  const [installmentInfo, setInstallmentInfo] = useState(loan?.installmentInfo || '');
+
+  // 分期明细：每期不同金额（花呗/白条等专用）
+  // 格式: [{month: "4月", amount: 1355.29, dueDate: "4月20日"}, ...]
+  type InstallmentItem = { month: string; amount: string; dueDate: string };
+  const parseInstallments = (): InstallmentItem[] => {
+    if (!loan?.installmentInfo) return [];
+    try {
+      const parsed = JSON.parse(loan.installmentInfo);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return [];
+  };
+  const [installmentItems, setInstallmentItems] = useState<InstallmentItem[]>(parseInstallments());
+  const [showInstallmentEditor, setShowInstallmentEditor] = useState(installmentItems.length > 0);
+
+  const addInstallmentItem = () => {
+    setInstallmentItems(prev => [...prev, { month: '', amount: '', dueDate: '' }]);
+  };
+
+  const updateInstallmentItem = (idx: number, field: keyof InstallmentItem, value: string) => {
+    setInstallmentItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+  };
+
+  const removeInstallmentItem = (idx: number) => {
+    setInstallmentItems(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const isPersonalLoan = loanType === 'PERSONAL_LOAN';
+  const isCreditLoan = CREDIT_LOAN_TYPES.includes(loanType);
+
+  // 当出账日变化时，自动计算还款日
+  const handleBillingDateChange = (value: string) => {
+    setBillingDate(value);
+    // 如果还款日为空，根据出账日自动计算
+    if (!paymentDueDate && value) {
+      const calculatedDueDate = calculatePaymentDueDate(parseInt(value), name);
+      if (calculatedDueDate) {
+        setPaymentDueDate(calculatedDueDate.toString());
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,6 +538,17 @@ function LoanForm({
       dueDate: dueDate || undefined,
       status: status || 'PENDING',
       remark: remark || undefined,
+      // 信用卡特有字段
+      creditLimit: isCreditLoan ? (parseFloat(creditLimit) || 0) : undefined,
+      billingDate: isCreditLoan ? (billingDate ? parseInt(billingDate) : undefined) : undefined,
+      paymentDueDate: isCreditLoan ? (paymentDueDate ? parseInt(paymentDueDate) : undefined) : undefined,
+      unpostedBalance: isCreditLoan ? (parseFloat(unpostedBalance) || 0) : undefined,
+      // 分期信息：优先使用结构化的分期明细
+      installmentInfo: isCreditLoan ? (
+        installmentItems.length > 0
+          ? JSON.stringify(installmentItems.filter(it => it.month || it.amount))
+          : (installmentInfo || undefined)
+      ) : undefined,
     });
   };
 
@@ -417,7 +557,7 @@ function LoanForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>名称</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：房贷" required />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={isCreditLoan ? "如：招行信用卡" : "如：房贷"} required />
         </div>
         <div className="space-y-2">
           <Label>类型</Label>
@@ -431,6 +571,106 @@ function LoanForm({
           </Select>
         </div>
       </div>
+
+      {/* 信用卡特有字段 */}
+      {isCreditLoan && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>信用额度</Label>
+              <Input type="number" step="0.01" value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} placeholder="如 20000" />
+            </div>
+            <div className="space-y-2">
+              <Label>待还金额</Label>
+              <Input type="number" step="0.01" value={remainingPrincipal} onChange={(e) => setRemainingPrincipal(e.target.value)} placeholder="当前应还" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>出账日（每月）</Label>
+              <Input type="number" min="1" max="31" value={billingDate} onChange={(e) => handleBillingDateChange(e.target.value)} placeholder="如 5" />
+              <p className="text-xs text-muted-foreground">输入出账日后，还款日将自动计算</p>
+            </div>
+            <div className="space-y-2">
+              <Label>还款日（每月）</Label>
+              <Input type="number" min="1" max="31" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} placeholder="如 23" />
+              {billingDate && !paymentDueDate && (
+                <p className="text-xs text-muted-foreground">
+                  自动计算：每月{calculatePaymentDueDate(parseInt(billingDate), name) || '需手动设置'}日
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>未出账金额</Label>
+              <Input type="number" step="0.01" value={unpostedBalance} onChange={(e) => setUnpostedBalance(e.target.value)} placeholder="已消费未出账" />
+            </div>
+          </div>
+          {/* 分期还款明细（花呗/白条等每期金额可能不同） */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>分期还款明细</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowInstallmentEditor(v => !v)}
+              >
+                {showInstallmentEditor ? '收起' : '展开'}
+              </Button>
+            </div>
+            {showInstallmentEditor && (
+              <div className="space-y-2 border rounded-md p-3 bg-muted/30">
+                <p className="text-xs text-muted-foreground">支持每期不同金额（如花呗 4 月含其他消费、后续各期固定）</p>
+                {installmentItems.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      value={item.month}
+                      onChange={(e) => updateInstallmentItem(idx, 'month', e.target.value)}
+                      placeholder="月份，如：4月"
+                      className="h-8 w-24"
+                    />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={item.amount}
+                      onChange={(e) => updateInstallmentItem(idx, 'amount', e.target.value)}
+                      placeholder="待还金额"
+                      className="h-8 flex-1"
+                    />
+                    <Input
+                      value={item.dueDate}
+                      onChange={(e) => updateInstallmentItem(idx, 'dueDate', e.target.value)}
+                      placeholder="还款日，如：4月20日"
+                      className="h-8 w-32"
+                    />
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={() => removeInstallmentItem(idx)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={addInstallmentItem} className="w-full">
+                  <Plus className="h-3 w-3 mr-1" />
+                  添加一期
+                </Button>
+              </div>
+            )}
+            {!showInstallmentEditor && (
+              <div className="space-y-1">
+                <Input
+                  value={installmentInfo}
+                  onChange={(e) => setInstallmentInfo(e.target.value)}
+                  placeholder="如：12期/已还6期（简单备注）"
+                />
+                <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowInstallmentEditor(true)}>
+                  切换为每期明细输入
+                </Button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {isPersonalLoan && (
         <div className="grid grid-cols-2 gap-4">
@@ -451,39 +691,69 @@ function LoanForm({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>金额</Label>
-          <Input type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="0.00" required />
-        </div>
-        <div className="space-y-2">
-          <Label>剩余本金</Label>
-          <Input type="number" step="0.01" value={remainingPrincipal} onChange={(e) => setRemainingPrincipal(e.target.value)} placeholder="默认等于金额" />
-        </div>
-      </div>
+      {!isCreditLoan && !isPersonalLoan && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>金额</Label>
+              <Input type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="0.00" required />
+            </div>
+            <div className="space-y-2">
+              <Label>剩余本金</Label>
+              <Input type="number" step="0.01" value={remainingPrincipal} onChange={(e) => setRemainingPrincipal(e.target.value)} placeholder="默认等于金额" />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>年化利率(%)</Label>
-          <Input type="number" step="0.01" value={annualRate} onChange={(e) => setAnnualRate(e.target.value)} placeholder="如 3.95" />
-        </div>
-        <div className="space-y-2">
-          <Label>每月还款日</Label>
-          <Input type="number" min="1" max="31" value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1-31" />
-        </div>
-      </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>年化利率(%)</Label>
+              <Input type="number" step="0.01" value={annualRate} onChange={(e) => setAnnualRate(e.target.value)} placeholder="如 3.95" />
+            </div>
+            <div className="space-y-2">
+              <Label>每月还款日</Label>
+              <Input type="number" min="1" max="31" value={paymentDay} onChange={(e) => setPaymentDay(e.target.value)} placeholder="1-31" />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>{isPersonalLoan ? '借款日期' : '开始日期'}</Label>
-          <Input type="date" value={isPersonalLoan ? loanDate : startDate}
-            onChange={(e) => { isPersonalLoan ? setLoanDate(e.target.value) : setStartDate(e.target.value); }} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>开始日期</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>结束日期</Label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {isPersonalLoan && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>金额</Label>
+            <Input type="number" step="0.01" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="0.00" required />
+          </div>
+          <div className="space-y-2">
+            <Label>年化利率(%)</Label>
+            <Input type="number" step="0.01" value={annualRate} onChange={(e) => setAnnualRate(e.target.value)} placeholder="如 3.95" />
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label>应还日期</Label>
-          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+      )}
+
+      {isPersonalLoan && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>{isPersonalLoan ? '借款日期' : '开始日期'}</Label>
+            <Input type="date" value={isPersonalLoan ? loanDate : startDate}
+              onChange={(e) => { isPersonalLoan ? setLoanDate(e.target.value) : setStartDate(e.target.value); }} />
+          </div>
+          <div className="space-y-2">
+            <Label>应还日期</Label>
+            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
         </div>
-      </div>
+      )}
 
       {isPersonalLoan && (
         <div className="grid grid-cols-2 gap-4">
@@ -505,7 +775,7 @@ function LoanForm({
         </div>
       )}
 
-      {!isPersonalLoan && (
+      {!isPersonalLoan && !isCreditLoan && (
         <div className="space-y-2">
           <Label>关联还款账户</Label>
           <Select value={linkedAccountId} onValueChange={setLinkedAccountId}>
@@ -813,6 +1083,31 @@ export default function Loans() {
                           {loan.billingDate && <div><p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>出账日</p><p className="font-semibold">每月{loan.billingDate}号</p></div>}
                           {loan.paymentDueDate && <div><p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>还款日</p><p className="font-semibold">每月{loan.paymentDueDate}号</p></div>}
                           {loan.unpostedBalance && loan.unpostedBalance > 0 && <div><p className="text-muted-foreground" style={{ fontSize: 'var(--font-size-small)' }}>未出账</p><p className="font-semibold text-warning">{formatMoney(loan.unpostedBalance)}</p></div>}
+                        </div>
+                        {/* 分期明细展示 */}
+                        {loan.installmentInfo && (() => {
+                          try {
+                            const items = JSON.parse(loan.installmentInfo);
+                            if (Array.isArray(items) && items.length > 0) {
+                              return (
+                                <div className="mt-3 pt-3 border-t">
+                                  <p className="text-xs text-muted-foreground mb-2">分期还款明细</p>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    {items.map((it: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1">
+                                        <span className="text-muted-foreground">{it.month}</span>
+                                        <span className="font-medium text-destructive">{it.amount ? `¥${parseFloat(it.amount).toFixed(2)}` : '-'}</span>
+                                        {it.dueDate && <span className="text-muted-foreground text-[10px]">{it.dueDate}</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            }
+                          } catch {}
+                          // 纯文本分期信息
+                          return <p className="mt-2 text-xs text-muted-foreground">{loan.installmentInfo}</p>;
+                        })()}
                         </div>
                       </CardContent>
                     </Card>

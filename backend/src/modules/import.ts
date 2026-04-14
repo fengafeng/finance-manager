@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import iconv from 'iconv-lite';
 import { prisma } from '../config/database.js';
 import { SourceType, TransactionType, CleanType } from '@prisma/client';
 
@@ -71,10 +72,24 @@ const DEPOSIT_WITHDRAWAL_KEYWORDS = [
 // ============================================
 
 /**
- * 解析支付宝 CSV 文件（新版格式）
+ * 解析支付宝 CSV 文件（新版格式，GBK 编码）
  */
 function parseAlipayCSV(filePath: string): CleanedTransaction[] {
-  const content = fs.readFileSync(filePath, 'utf-8');
+  // 支付宝 CSV 使用 GBK 编码，必须用 iconv-lite 解码
+  const rawBuffer = fs.readFileSync(filePath);
+  // 尝试检测编码：如果有 BOM (EF BB BF) 则是 UTF-8，否则尝试 GBK
+  let content: string;
+  if (rawBuffer[0] === 0xEF && rawBuffer[1] === 0xBB && rawBuffer[2] === 0xBF) {
+    content = rawBuffer.slice(3).toString('utf-8');
+  } else {
+    // 先尝试 GBK，如果解码后能找到表头就用 GBK
+    const gbkContent = iconv.decode(rawBuffer, 'gbk');
+    if (gbkContent.includes('交易时间') && gbkContent.includes('交易分类')) {
+      content = gbkContent;
+    } else {
+      content = rawBuffer.toString('utf-8');
+    }
+  }
   const lines = content.split('\n');
 
   // 找到表头行
@@ -165,23 +180,22 @@ function parseAlipayCSV(filePath: string): CleanedTransaction[] {
  */
 async function parseWechatExcel(filePath: string): Promise<CleanedTransaction[]> {
   const xlsx = require('xlsx');
-  const workbook = xlsx.readFile(filePath);
+  const workbook = xlsx.readFile(filePath, { cellDates: false }); // 不自动转换日期，手动处理
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   const data = xlsx.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-  // 找到表头行
+  // 找到表头行（微信账单表头包含"交易时间"和"交易类型"）
   let headerIndex = -1;
   const headers: Record<string, number> = {};
 
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    if (row && row.length > 0) {
-      const firstCell = String(row[0] || '').trim();
-      if (firstCell === '交易时间' || firstCell === '交易单号') {
+    if (row && row.length > 3) {
+      const cells = row.map((c: any) => String(c || '').trim());
+      if (cells.includes('交易时间') && (cells.includes('交易类型') || cells.includes('收/支'))) {
         headerIndex = i;
-        row.forEach((cell: any, idx: number) => {
-          const header = String(cell || '').trim();
+        cells.forEach((header: string, idx: number) => {
           if (header) headers[header] = idx;
         });
         break;
@@ -190,56 +204,88 @@ async function parseWechatExcel(filePath: string): Promise<CleanedTransaction[]>
   }
 
   if (headerIndex === -1) {
-    throw new Error('无法识别微信支付账单格式');
+    throw new Error('无法识别微信支付账单格式，请确认文件是微信支付账单');
+  }
+
+  // Excel 数字日期转字符串（微信账单时间是 Excel 序列号）
+  function excelDateToString(val: any): string {
+    if (!val) return '';
+    // 如果已经是字符串日期格式，直接返回
+    if (typeof val === 'string' && val.includes('-')) return val;
+    // Excel 日期序列号转 Date（Excel epoch: 1900-01-01，但有1900年2月29日的BUG，偏移2天）
+    if (typeof val === 'number') {
+      const date = xlsx.SSF.parse_date_code(val);
+      if (date) {
+        const y = date.y;
+        const m = String(date.m).padStart(2, '0');
+        const d = String(date.d).padStart(2, '0');
+        const H = String(date.H).padStart(2, '0');
+        const M = String(date.M).padStart(2, '0');
+        const S = String(date.S).padStart(2, '0');
+        return `${y}-${m}-${d} ${H}:${M}:${S}`;
+      }
+    }
+    return String(val);
   }
 
   const records: CleanedTransaction[] = [];
+  // 微信账单金额列名可能是"金额(元)"或"金额"
+  const amountColName = headers['金额(元)'] !== undefined ? '金额(元)' : '金额';
 
   for (let i = headerIndex + 1; i < data.length; i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
 
-    const transactionTime = String(row[headers['交易时间']] || '');
-    const tradeType = String(row[headers['交易类型']] || '');
-    const counterparty = String(row[headers['交易对方']] || '');
-    const description = String(row[headers['商品']] || row[headers['商品说明']] || '');
-    const incomeExpense = String(row[headers['收/支']] || '');
-    const amountStr = String(row[headers['金额']] || row[headers['支付金额']] || '0');
-    const paymentMethod = String(row[headers['支付方式']] || '');
-    const status = String(row[headers['交易状态']] || '');
+    const transactionTime = excelDateToString(row[headers['交易时间']]);
+    const tradeType = String(row[headers['交易类型']] || '').trim();
+    const counterparty = String(row[headers['交易对方']] || '').trim();
+    const description = String(row[headers['商品']] || row[headers['商品说明']] || '').trim();
+    const incomeExpense = String(row[headers['收/支']] || '').trim();
+    const amountRaw = row[headers[amountColName]];
+    const paymentMethod = String(row[headers['支付方式']] || '').trim();
+    const status = String(row[headers['当前状态']] || row[headers['交易状态']] || '').trim();
 
-    if (!transactionTime) continue;
+    if (!transactionTime || transactionTime === '') continue;
 
-    const amount = parseFloat(amountStr.replace(/[^\d.-]/g, '')) || 0;
+    // 金额：可能是数字或带¥的字符串
+    const amount = typeof amountRaw === 'number'
+      ? amountRaw
+      : parseFloat(String(amountRaw || '0').replace(/[^\d.-]/g, '')) || 0;
     if (amount === 0) continue;
+
+    // 跳过中性交易（收/支 为 "/" 或 "/"）
+    if (incomeExpense === '/' || incomeExpense === '') continue;
 
     // 判断清洗类型
     let cleanType: CleanType | null = null;
     let cleanReason: string | null = null;
 
     // 1. 退款
-    if (status.includes('已退款') || status.includes('退款')) {
+    if (status.includes('已退款') || status.includes('退款') || tradeType.includes('退款')) {
       cleanType = CleanType.REFUND;
       cleanReason = `退款记录: ${description || counterparty}`;
     }
-    // 2. 转账
-    else if (tradeType.includes('转账') || counterparty.includes('转账')) {
-      cleanType = CleanType.INTERNAL_TRANSFER;
-      cleanReason = `转账: ${counterparty || description}`;
+    // 2. 零钱提现、充值
+    else if (tradeType.includes('零钱提现') || tradeType.includes('充值') || tradeType.includes('提现')) {
+      cleanType = CleanType.DEPOSIT;
+      cleanReason = `充值/提现: ${tradeType} - ${counterparty}`;
     }
-    // 3. 红包
-    else if (tradeType.includes('红包') || tradeType.includes('收款')) {
-      if (counterparty.includes('微信红包') || description.includes('红包')) {
-        cleanType = CleanType.INTERNAL_TRANSFER;
-        cleanReason = `红包收发: ${description || counterparty}`;
-      }
+    // 3. 信用卡还款、理财通
+    else if (tradeType.includes('信用卡还款') || tradeType.includes('理财通') || tradeType.includes('零钱通')) {
+      cleanType = CleanType.DEPOSIT;
+      cleanReason = `信用卡还款/理财: ${tradeType}`;
+    }
+    // 4. 转账（个人间转账）
+    else if (tradeType === '转账' && incomeExpense === '支出') {
+      cleanType = CleanType.INTERNAL_TRANSFER;
+      cleanReason = `个人转账: ${counterparty}`;
     }
 
     // 判断交易类型
     let type: TransactionType;
-    if (incomeExpense === '收入' || incomeExpense === '收到') {
+    if (incomeExpense === '收入') {
       type = TransactionType.INCOME;
-    } else if (incomeExpense === '支出' || incomeExpense === '支出') {
+    } else if (incomeExpense === '支出') {
       type = TransactionType.EXPENSE;
     } else {
       continue;

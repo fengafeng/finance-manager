@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { FadeIn, Stagger } from '@/components/MotionPrimitives';
+import { FadeIn } from '@/components/MotionPrimitives';
 import {
   useImportUpload,
   useImportPreview,
   useImportConfirm,
   CleanedTransaction,
-  UploadResult,
 } from '@/hooks/use-import';
 import { useAccounts } from '@/hooks/use-accounts';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,14 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   Upload,
   FileSpreadsheet,
@@ -33,7 +24,6 @@ import {
   X,
   RefreshCw,
   ChevronDown,
-  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -90,18 +80,27 @@ function StepUpload({
       return;
     }
 
+    console.log('[Import] 开始上传文件:', selectedFile.name, '账户ID:', accountId);
+    
     try {
       const result = await uploadMutation.mutateAsync({
         file: selectedFile,
         accountId,
       });
+      console.log('[Import] 上传成功:', result);
       const sessionId = result.data?.sessionId || result.sessionId;
       if (sessionId) {
         onUploaded(sessionId, accountId);
         toast.success('账单解析成功');
+      } else {
+        console.error('[Import] 缺少 sessionId:', result);
+        toast.error('解析失败：未获取到会话ID');
       }
     } catch (err: any) {
-      toast.error(err?.message || '上传失败');
+      console.error('[Import] 上传失败:', err);
+      // 更详细的错误信息
+      const errorMsg = err?.response?.data?.error || err?.message || '上传失败';
+      toast.error(`上传失败: ${errorMsg}`);
     }
   };
 
@@ -121,7 +120,7 @@ function StepUpload({
         </div>
       </FadeIn>
 
-      {/* 账户选择 */}
+      {/* 账户选择 - 按大类分组 */}
       <FadeIn>
         <div className="space-y-2">
           <Label>导入到账户</Label>
@@ -131,12 +130,62 @@ function StepUpload({
             className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
           >
             <option value="">请选择账户</option>
-            {accounts?.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name} ({acc.type === 'ALIPAY' ? '支付宝' : acc.type === 'WECHAT' ? '微信' : '其他'})
-              </option>
-            ))}
+            {/* 支付宝 */}
+            {(accounts?.filter(acc => acc.type === 'ALIPAY') || []).length > 0 && (
+              <optgroup label="💰 支付宝">
+                {(accounts?.filter(acc => acc.type === 'ALIPAY') || []).map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {/* 微信 */}
+            {(accounts?.filter(acc => acc.type === 'WECHAT') || []).length > 0 && (
+              <optgroup label="💚 微信">
+                {(accounts?.filter(acc => acc.type === 'WECHAT') || []).map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {/* 银行卡 */}
+            {(accounts?.filter(acc => acc.type === 'BANK') || []).length > 0 && (
+              <optgroup label="💳 银行卡">
+                {(accounts?.filter(acc => acc.type === 'BANK') || []).map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {/* 信用卡 */}
+            {(accounts?.filter(acc => acc.type === 'CREDIT_CARD') || []).length > 0 && (
+              <optgroup label="🏦 信用卡">
+                {(accounts?.filter(acc => acc.type === 'CREDIT_CARD') || []).map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {/* 其他 */}
+            {(accounts?.filter(acc => !['ALIPAY', 'WECHAT', 'BANK', 'CREDIT_CARD'].includes(acc.type)) || []).length > 0 && (
+              <optgroup label="📁 其他">
+                {(accounts?.filter(acc => !['ALIPAY', 'WECHAT', 'BANK', 'CREDIT_CARD'].includes(acc.type)) || []).map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {accounts && accounts.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              暂无账户，请先在账户管理中添加账户
+            </p>
+          )}
         </div>
       </FadeIn>
 

@@ -8,9 +8,7 @@ import axios, { AxiosError } from 'axios';
 export const apiClient = axios.create({
   baseURL: '/api',
   timeout: 60000, // 60秒超时，支持 AI 解析等长时间操作
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // 注意：不设置默认 Content-Type，让 axios 自动处理（JSON 请求会自己设置）
 });
 
 /**
